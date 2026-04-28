@@ -55,16 +55,14 @@ def build_article_text(record):
     if isinstance(titles, list):
         parts.extend([str(t) for t in titles if t is not None])
 
-    keywords = record.get('keywords')
-    if isinstance(keywords, list)
+    keywords = record.get("keywords")
+    if isinstance(keywords, list):
         parts.extend([str(k) for k in keywords if k is not None])
 
     # paragraphs = record.get("paragraphs")
     # if isinstance(paragraphs, list):
     #     parts.extend([str(p) for p in paragraphs if p is not None])
  
-   
-    
 
     return " ".join(parts).strip()
 
@@ -135,14 +133,17 @@ def evaluate_topic_neighbor_purity(embeddings, topic_sets, rng):
         return 0.0, 0
 
     sample_size = min(TOPIC_SAMPLE_SIZE, len(candidate_indices))
-    sample_indices = rng.sample(candidate_indices, sample_size)
+    sample_indices = rng.sample(candidate_indices, sample_size) # sample 20 random articles
 
     total_percentage = 0.0
     for index in sample_indices:
-        similarities = embeddings @ embeddings[index]
+        # compute cosine similarities from embedding at index to all embeddings
+        similarities = embeddings @ embeddings[index] # gives us 3000 calculated similarities
+        # set similarity to self to a low value (will not be selected)
         similarities[index] = -1.0
 
         top_k = min(TOP_K_NEIGHBORS, len(similarities) - 1)
+        # get tok k embeddings in any order
         top_indices = np.argpartition(-similarities, top_k)[:top_k]
 
         shared = 0
@@ -150,8 +151,10 @@ def evaluate_topic_neighbor_purity(embeddings, topic_sets, rng):
             if share_topic(topic_sets[index], topic_sets[neighbor]):
                 shared += 1
 
+        # calculate the percantage of top_k articles close to the chosen article that share the same topic
         total_percentage += shared / top_k
 
+    # average percantage of articles sharing topics over 20 articles
     average_percentage = (total_percentage / sample_size) * 100.0
     return average_percentage, sample_size
 
@@ -163,7 +166,10 @@ def average_intra_similarity(embeddings, indices):
 
     group = embeddings[indices]
     similarity_matrix = group @ group.T
+    # the upper triangle of the similarity matrix above the diagonal
+    # we do not use self similarities and the duplicated similarities (down triangle)
     upper = np.triu_indices(len(indices), k=1)
+    # return the average similarity for these upper matrix similarities
     return float(similarity_matrix[upper].mean())
 
 
@@ -179,10 +185,12 @@ def average_inter_similarity(embeddings, indices, topic_sets, entity_blob, entit
     negative_similarities = []
     entity_lower = entity_name.lower()
 
+    # indices contains article that share the same entity
     for index in indices:
         tries = 0
         chosen_negative = None
 
+        # if we do not get the negative article in NEGATIVE_SAMPLE_TRIE we move on to the next index
         while tries < NEGATIVE_SAMPLE_TRIES:
             candidate = rng.randrange(len(embeddings))
             tries += 1
@@ -195,7 +203,9 @@ def average_inter_similarity(embeddings, indices, topic_sets, entity_blob, entit
 
             if topic_sets[index] and share_topic(topic_sets[index], topic_sets[candidate]):
                 continue
-
+            
+            # if the article does not contain the entities or the topics or the article at index "index"
+            # we choose it since it should have a low similarity to the chosen article
             chosen_negative = candidate
             break
 
@@ -206,6 +216,7 @@ def average_inter_similarity(embeddings, indices, topic_sets, entity_blob, entit
     if not negative_similarities:
         return None
 
+    # return the average of the negative similarities
     return float(np.mean(negative_similarities))
 
 
@@ -251,7 +262,9 @@ def main():
         print("\n" + "=" * 80)
         print(f"Model: {model_name}")
 
+        # Testing a new model
         model = SentenceTransformer(model_name)
+        # vectorize the article
         embeddings = model.encode(texts)
         embeddings = normalize_embeddings(np.array(embeddings))
 
