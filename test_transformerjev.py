@@ -31,6 +31,7 @@ MODEL_NAMES = [
     "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "sentence-transformers/all-mpnet-base-v2",
     "embaas/sentence-transformers-e5-large-v2",
+    "sentence-transformers/distiluse-base-multilingual-cased-v2",
 ]
 
 
