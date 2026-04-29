@@ -25,16 +25,25 @@ TOP_K_NEIGHBORS = 50
 ENTITY_SAMPLE_SIZE = 10
 NEGATIVE_SAMPLE_TRIES = 50
 
+# Field weights for combining embeddings
+FIELD_WEIGHTS = {
+    "lead": 1.0,
+    "paragraphs": 0.8,
+    "keywords": 0.5,
+    "mention": 0.3,
+    "authors": 0.0,
+}
+
 # Model identifiers to evaluate
 MODEL_NAMES = [
-    "sentence-transformers/all-MiniLM-L6-v2",
+    # "sentence-transformers/all-MiniLM-L6-v2",
     "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-    "sentence-transformers/all-mpnet-base-v2",
-    "embaas/sentence-transformers-e5-large-v2",
+    # "sentence-transformers/all-mpnet-base-v2",
+    # "embaas/sentence-transformers-e5-large-v2",
     "sentence-transformers/distiluse-base-multilingual-cased-v2",
     "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
     "sentence-transformers/stsb-xlm-r-multilingual",
-    "intfloat/multilingual-e5-large",
+    # "intfloat/multilingual-e5-large",
 ]
 
 NAMED_ENTITIES = [
@@ -59,28 +68,20 @@ def normalize_topics(topic_value):
     return []
 
 
-def build_article_text(record):
-    """Build embedding text from lead, titles and keywords (if available)."""
-    parts = []
+def extract_field_texts(record):
+    """Extract individual fields as separate strings."""
+    field_texts = {}
 
-    lead = record.get("lead")
-    if isinstance(lead, str):
-        parts.append(lead)
-    
-    titles = record.get("title") 
-    if isinstance(titles, list):
-        parts.extend([str(t) for t in titles if t is not None])
-
-    keywords = record.get("keywords")
-    if isinstance(keywords, list):
-        parts.extend([str(k) for k in keywords if k is not None])
-
-    # paragraphs = record.get("paragraphs")
-    # if isinstance(paragraphs, list):
-    #     parts.extend([str(p) for p in paragraphs if p is not None])
- 
-
-    return " ".join(parts).strip()
+    for field in ("lead", "keywords", "authors", "paragraphs", "mention"):
+        value = record.get(field)
+        if isinstance(value, list):
+            field_texts[field] = " ".join([str(v) for v in value if v is not None]).strip()
+        elif isinstance(value, str):
+            field_texts[field] = value.strip()
+        else:
+            field_texts[field] = ""
+            
+    return field_texts
 
 
 def build_entity_blob(record):
@@ -270,7 +271,7 @@ def main():
     rng = random.Random(RANDOM_SEED)
 
     records = load_records(DATASET_PATH)
-    texts = [build_article_text(record) for record in records]
+    field_texts_list = [extract_field_texts(record) for record in records]
     topic_sets = [set(normalize_topics(record["topics"])) for record in records]
     entity_blob = [build_entity_blob(record) for record in records]
 
@@ -280,9 +281,34 @@ def main():
 
         # Testing a new model
         model = SentenceTransformer(model_name)
-        # vectorize the article
-        embeddings = model.encode(texts)
-        embeddings = normalize_embeddings(np.array(embeddings))
+        
+        # Vectorize the fields separately
+        num_records = len(records)
+        embeddings_list = []
+        for field in FIELD_WEIGHTS.keys():
+            texts = [ft[field] for ft in field_texts_list]
+            # Get embeddings for this specific field
+            field_embeddings = model.encode(texts)
+            embeddings_list.append((field, field_embeddings))
+
+        final_embeddings = np.zeros_like(embeddings_list[0][1])
+        weight_sums = np.zeros((num_records, 1))
+
+        for field, field_embeddings in embeddings_list:
+            weight = FIELD_WEIGHTS.get(field, 0.0)
+            if weight == 0.0:
+                continue
+                
+            # Create a mask for non-empty texts so empty fields do not contribute
+            has_text_mask = np.array([1.0 if ft[field] else 0.0 for ft in field_texts_list])[:, None]
+            
+            final_embeddings += field_embeddings * weight * has_text_mask
+            weight_sums += weight * has_text_mask
+            
+        # Avoid division by zero for records that might be completely empty
+        weight_sums[weight_sums == 0] = 1.0
+        embeddings = final_embeddings / weight_sums
+        embeddings = normalize_embeddings(embeddings)
 
         purity, sample_size = evaluate_topic_neighbor_purity(embeddings, topic_sets, rng)
         print(
