@@ -22,7 +22,7 @@ DATASET_PATH = Path("testing_dataset.yaml")
 RANDOM_SEED = 42
 TOPIC_SAMPLE_SIZE = 20
 TOP_K_NEIGHBORS = 10
-ENTITY_SAMPLE_SIZE = 5
+ENTITY_SAMPLE_SIZE = 10
 NEGATIVE_SAMPLE_TRIES = 50
 
 # Model identifiers to evaluate
@@ -276,6 +276,7 @@ def main():
         )
 
         entity_results = evaluate_entity_coherence(embeddings, entity_blob, topic_sets, rng)
+        entity_results = sorted(entity_results, key=lambda result: result["entity"].lower())
         print("Entity coherence:")
         for result in entity_results:
             entity = result["entity"]
