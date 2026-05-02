@@ -1,47 +1,47 @@
 import yaml
 import numpy as np
 import pandas as pd
-from pathlib import Path
 
-def read_yaml_exclude_urls(yaml_file):
+
+def read_yaml(yaml_file):
     """
-    Read YAML file and extract all data except URLs into separate arrays/dataframes.
-    
+    Read YAML file and extract all article fields into numpy arrays and a DataFrame.
+    The first img URL from figures is extracted as the article thumbnail.
+
     Args:
         yaml_file (str): Path to the YAML file
-    
+
     Returns:
-        dict: Dictionary containing numpy arrays and pandas DataFrames for each field
+        dict: numpy arrays keyed by field name, plus a 'dataframe' key
     """
-    
-    # Load YAML file
+
     with open(yaml_file, 'r', encoding='utf-8') as f:
         data = yaml.safe_load(f)
-    
-    # Initialize storage containers
-    storage = {}
-    
-    # Define fields to exclude (URLs)
-    exclude_fields = {'url', 'img'}
-    
-    # Collect all data except URLs
-    for field_name, field_values in {
-        'id': [],
-        'topics': [],
-        'authors': [],
-        'date': [],
-        'keywords': [],
-        'lead': [],
-        'mention': [],
+
+    storage = {
+        '_id':        [],
+        'id':         [],
+        'title':      [],
+        'topics':     [],
+        'authors':    [],
+        'date':       [],
+        'keywords':   [],
+        'lead':       [],
+        'mention':    [],
         'paragraphs': [],
-        'captions': [],
-        'sources': [],
-    }.items():
-        storage[f'{field_name}'] = field_values
-    
-    # Extract data from each entry
+        'captions':   [],
+        'sources':    [],
+        'url':        [],
+        'thumbnail':  [],  # first img URL from figures
+    }
+
     for entry in data:
+        figures   = entry.get('figures') or []
+        thumbnail = figures[0].get('img') if figures else None
+
+        storage['_id'].append(entry.get('_id'))
         storage['id'].append(entry.get('id'))
+        storage['title'].append(entry.get('title'))
         storage['topics'].append(entry.get('topics'))
         storage['authors'].append(entry.get('authors'))
         storage['date'].append(entry.get('date'))
@@ -49,63 +49,63 @@ def read_yaml_exclude_urls(yaml_file):
         storage['lead'].append(entry.get('lead'))
         storage['mention'].append(entry.get('mention'))
         storage['paragraphs'].append(entry.get('paragraphs'))
-        
-        # Extract captions and sources from figures (excluding img URLs)
-        figures = entry.get('figures', [])
-        captions = [fig.get('caption') for fig in figures]
-        sources = [fig.get('source') for fig in figures]
-        storage['captions'].append(captions)
-        storage['sources'].append(sources)
-    
-    # Convert to numpy arrays and pandas DataFrames
-    result = {}
-    
-    # Simple fields as numpy arrays
-    result['id'] = np.array(storage['id'], dtype=object)
-    result['topics'] = np.array(storage['topics'], dtype=object)
-    result['date'] = np.array(storage['date'], dtype=object)
-    
-    # Complex fields as pandas DataFrames or numpy object arrays
-    result['authors'] = np.array(storage['authors'], dtype=object)
-    result['keywords'] = np.array(storage['keywords'], dtype=object)
-    result['lead'] = np.array(storage['lead'], dtype=object)
-    result['mention'] = np.array(storage['mention'], dtype=object)
-    result['paragraphs'] = np.array(storage['paragraphs'], dtype=object)
-    result['captions'] = np.array(storage['captions'], dtype=object)
-    result['sources'] = np.array(storage['sources'], dtype=object)
-    
-    # Alternative: Create a pandas DataFrame if you prefer
+        storage['url'].append(entry.get('url'))
+        storage['thumbnail'].append(thumbnail)
+        storage['captions'].append([f.get('caption') for f in figures])
+        storage['sources'].append([f.get('source')  for f in figures])
+
+    result = {key: np.array(val, dtype=object) for key, val in storage.items()}
+
     result['dataframe'] = pd.DataFrame({
-        'id': result['id'],
-        'topics': result['topics'],
-        'authors': result['authors'],
-        'date': result['date'],
-        'keywords': result['keywords'],
-        'lead': result['lead'],
-        'mention': result['mention'],
-        'sources': result['sources']
+        '_id':       result['_id'],
+        'id':        result['id'],
+        'title':     result['title'],
+        'topics':    result['topics'],
+        'authors':   result['authors'],
+        'date':      result['date'],
+        'keywords':  result['keywords'],
+        'lead':      result['lead'],
+        'mention':   result['mention'],
+        'sources':   result['sources'],
+        'url':       result['url'],
+        'thumbnail': result['thumbnail'],
     })
-    
+
     return result
 
-# Example usage
+
 if __name__ == "__main__":
-    yaml_file = "mmc-10.yaml"  # Change to mmc-100.yaml or mmc.yaml as needed
-    
-    # Read and extract data
-    arrays = read_yaml_exclude_urls(yaml_file)
-    
-    # Display information
-    print(f"Number of entries: {len(arrays['id'])}")
+    yaml_file = "mmc-10.yaml"
+
+    arrays = read_yaml(yaml_file)
+    total  = len(arrays['id'])
+
+    print(f"Number of entries: {total}")
     print(f"\nArray shapes:")
     for key, value in arrays.items():
         if key != 'dataframe':
             print(f"  {key}: {value.shape}")
-    
+
     print(f"\nDataFrame shape: {arrays['dataframe'].shape}")
     print(f"\nDataFrame head:\n{arrays['dataframe'].head()}")
-    
-    # Access individual arrays
-    print(f"\nFirst entry ID: {arrays['id'][0]}")
-    print(f"First entry lead: {arrays['lead'][0][:100]}...")
-    print(f"First entry keywords: {arrays['keywords'][0]}")
+
+    print(f"\nFirst entry ID:        {arrays['id'][0]}")
+    print(f"First entry title:     {arrays['title'][0]}")
+    print(f"First entry thumbnail: {arrays['thumbnail'][0]}")
+    print(f"First entry lead:      {str(arrays['lead'][0])[:100]}...")
+
+    # ── Empty/null check per column ───────────────────────────────────────────
+    print(f"\n{'─'*40}")
+    print(f"Empty / null values per column (out of {total} rows):")
+    print(f"{'─'*40}")
+    for key, arr in arrays.items():
+        if key == 'dataframe':
+            continue
+        empty = sum(
+            1 for v in arr
+            if v is None or v == [] or v == '' or (isinstance(v, float) and v != v)
+        )
+        pct = (empty / total) * 100
+        flag = "  ⚠️" if empty > 0 else ""
+        print(f"  {key:<12} {empty:>5} empty  ({pct:.1f}%){flag}")
+    print(f"{'─'*40}")
