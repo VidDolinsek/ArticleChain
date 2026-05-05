@@ -13,7 +13,7 @@ import random
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from read_yaml_data import read_yaml
+from test_transformerjev.read_yaml_data import read_yaml
 
 
 
