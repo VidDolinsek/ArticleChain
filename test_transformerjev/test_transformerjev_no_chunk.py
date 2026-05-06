@@ -44,6 +44,7 @@ MODEL_NAMES = [
     "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
     "sentence-transformers/stsb-xlm-r-multilingual",
     # "intfloat/multilingual-e5-large",
+    "google-bert/bert-base-multilingual-cased", 
 ]
 
 NAMED_ENTITIES = [
