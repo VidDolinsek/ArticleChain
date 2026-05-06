@@ -1,71 +1,79 @@
 """
-update_lead.py
---------------
-Updates articles in the database with lead text from a YAML file.
-The lead is stored as plain text in the 'lead' column (type: text).
+update_paragraphs.py
+-------------------
+Updates articles in the database with paragraphs from a YAML file.
+The paragraphs are stored as a JSON array in the 'paragraphs' column (type: text).
 
 Usage:
-    python update_lead.py --yaml mmc.yaml
+    python update_paragraphs.py --yaml mmc.yaml --password your_password
 
-The lead is a single text field per article (typically 1-3 sentences).
+Each article can have multiple paragraphs. The paragraphs are stored as:
+    - JSON array: ["paragraph 1", "paragraph 2", ...]
+    - This format allows for:
+      * Easy parsing in Python/JavaScript
+      * Individual paragraph access
+      * Flexibility for different paragraph counts (typically 5-30 per article)
 """
 
 import argparse
-import os
+import json
 import psycopg2
 from psycopg2.extras import execute_batch
 from tqdm import tqdm
-from dotenv import load_dotenv
 
 from read_yaml_data import read_yaml
 
 
-UPDATE_LEAD_SQL = """
+UPDATE_PARAGRAPHS_SQL = """
 UPDATE articles
-SET lead = %s
+SET paragraphs = %s
 WHERE id = %s;
 """
 
 
-def update_lead(yaml_file: str, batch_size: int = 500):
+def update_paragraphs(yaml_file: str, password: str, batch_size: int = 500):
     """
-    Load articles from YAML and update their lead in the database.
+    Load articles from YAML and update their paragraphs in the database.
     
     Args:
         yaml_file: Path to the YAML file
+        password: Database password for rtvdb
         batch_size: Number of updates per batch (default: 500)
     """
     print(f"Reading {yaml_file} ...")
     data = read_yaml(yaml_file)
 
-    # Prepare rows: (lead_text, article_id)
+    # Prepare rows: (paragraphs_json, article_id)
     rows = []
-    for article_id, lead_text in zip(
+    for article_id, paragraphs_list in zip(
         data['_id'], 
-        data['lead']
+        data['paragraphs']
     ):
         if article_id is None:
             continue
         
-        # Use lead text as-is, or empty string if None
-        lead = lead_text if lead_text else ""
+        # Convert paragraphs list to JSON string
+        # If paragraphs_list is None or empty, store empty array
+        if paragraphs_list:
+            paragraphs_json = json.dumps(paragraphs_list, ensure_ascii=False)
+        else:
+            paragraphs_json = json.dumps([], ensure_ascii=False)
         
-        rows.append((lead, str(article_id)))
+        rows.append((paragraphs_json, str(article_id)))
     
-    print(f"Loaded {len(rows)} articles with lead text.")
+    print(f"Loaded {len(rows)} articles with paragraphs.")
     
     # Show statistics
-    lead_chars = [len(l) if l else 0 for l in data['lead'] if l is not None]
-    if lead_chars:
-        print(f"  Min lead length: {min(lead_chars)} characters")
-        print(f"  Max lead length: {max(lead_chars)} characters")
-        print(f"  Avg lead length: {sum(lead_chars) / len(lead_chars):.0f} characters")
-
+    para_counts = [len(p) if p else 0 for p in data['paragraphs'] if p is not None]
+    if para_counts:
+        print(f"  Min paragraphs per article: {min(para_counts)}")
+        print(f"  Max paragraphs per article: {max(para_counts)}")
+        print(f"  Avg paragraphs per article: {sum(para_counts) / len(para_counts):.1f}")
 
     print("Connecting to database ...")
     conn = psycopg2.connect(
         user="rtvdb",
-        password=os.getenv("DB_PASSWORD"),
+        password=password,
         host="rtvdb.postgres.database.azure.com",
         port=5432,
         database="postgres",
@@ -73,24 +81,23 @@ def update_lead(yaml_file: str, batch_size: int = 500):
     cur = conn.cursor()
     cur.execute("SET timezone = 'Europe/Ljubljana';")
 
-    print(f"Updating lead in batches of {batch_size} ...")
+    print(f"Updating paragraphs in batches of {batch_size} ...")
     for i in tqdm(range(0, len(rows), batch_size)):
-        execute_batch(cur, UPDATE_LEAD_SQL, rows[i : i + batch_size], page_size=batch_size)
+        execute_batch(cur, UPDATE_PARAGRAPHS_SQL, rows[i : i + batch_size], page_size=batch_size)
         conn.commit()
 
     cur.close()
     conn.close()
-    print("Done. All lead text updated.")
+    print("Done. All paragraphs updated.")
 
 
 if __name__ == "__main__":
-    load_dotenv()
-    
     parser = argparse.ArgumentParser(
-        description="Update articles with lead text from YAML file."
+        description="Update articles with paragraphs from YAML file."
     )
-    parser.add_argument("--yaml", required=True, help="Path to the YAML file")
-    parser.add_argument("--batch-size", type=int, default=500, help="Rows per batch (default: 500)")
+    parser.add_argument("--yaml",       required=True,           help="Path to the YAML file")
+    parser.add_argument("--password",   required=True,           help="Database password for rtvdb")
+    parser.add_argument("--batch-size", type=int, default=500,   help="Rows per batch (default: 500)")
     args = parser.parse_args()
 
-    update_lead(args.yaml, args.batch_size)
+    update_paragraphs(args.yaml, args.password, args.batch_size)
