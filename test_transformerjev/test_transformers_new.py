@@ -13,7 +13,7 @@ import random
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from test_transformerjev.read_yaml_data import read_yaml
+from read_yaml_data import read_yaml
 
 
 # Dataset and evaluation settings
@@ -24,14 +24,7 @@ TOP_K_NEIGHBORS = 50
 ENTITY_SAMPLE_SIZE = 10
 NEGATIVE_SAMPLE_TRIES = 50
 
-# Field weights for combining embeddings
-FIELD_WEIGHTS = {
-    "lead": 1.0,
-    "paragraphs": 0.8,
-    "keywords": 0.5,
-    "mention": 0.3,
-    "authors": 0.0,
-}
+CONCAT_FIELDS = ("lead", "paragraphs", "keywords", "mention")
 
 MODEL_NAMES = [
     "BSC-LT/MrBERT",
@@ -61,17 +54,19 @@ def normalize_topics(topic_value):
     return []
 
 
-def extract_field_texts(record):
-    field_texts = {}
-    for field in ("lead", "keywords", "authors", "paragraphs", "mention"):
+def build_text(record):
+    parts = []
+    for field in CONCAT_FIELDS:
         value = record.get(field)
         if isinstance(value, list):
-            field_texts[field] = " ".join([str(v) for v in value if v is not None]).strip()
+            text = " ".join(str(v) for v in value if v is not None).strip()
         elif isinstance(value, str):
-            field_texts[field] = value.strip()
+            text = value.strip()
         else:
-            field_texts[field] = ""
-    return field_texts
+            text = ""
+        if text:
+            parts.append(text)
+    return " ".join(parts)
 
 
 def build_entity_blob(record):
@@ -88,11 +83,6 @@ def build_entity_blob(record):
             parts.append(value)
     return " ".join(parts).lower()
 
-
-def normalize_embeddings(embeddings):
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    norms = np.where(norms == 0, 1.0, norms)
-    return embeddings / norms
 
 
 def load_records(dataset_path: Path):
@@ -200,37 +190,16 @@ def main():
     rng = random.Random(RANDOM_SEED)
 
     records = load_records(DATASET_PATH)
-    field_texts_list = [extract_field_texts(record) for record in records]
+    texts = [build_text(record) for record in records]
     topic_sets = [set(normalize_topics(record["topics"])) for record in records]
     entity_blob = [build_entity_blob(record) for record in records]
-
-    num_records = len(records)
 
     for model_name in MODEL_NAMES:
         print("\n" + "=" * 80)
         print(f"Model: {model_name}")
 
         model = SentenceTransformer(model_name)
-
-        embeddings_list = []
-        for field in FIELD_WEIGHTS:
-            texts = [ft[field] for ft in field_texts_list]
-            field_embeddings = model.encode(texts)
-            embeddings_list.append((field, field_embeddings))
-
-        final_embeddings = np.zeros_like(embeddings_list[0][1])
-        weight_sums = np.zeros((num_records, 1))
-
-        for field, field_embeddings in embeddings_list:
-            weight = FIELD_WEIGHTS[field]
-            if weight == 0.0:
-                continue
-            has_text_mask = np.array([1.0 if ft[field] else 0.0 for ft in field_texts_list])[:, None]
-            final_embeddings += field_embeddings * weight * has_text_mask
-            weight_sums += weight * has_text_mask
-
-        weight_sums[weight_sums == 0] = 1.0
-        embeddings = normalize_embeddings(final_embeddings / weight_sums)
+        embeddings = model.encode(texts, normalize_embeddings=True, show_progress_bar=True)
 
         purity, sample_size = evaluate_topic_neighbor_purity(embeddings, topic_sets, rng)
         print(f"Topic neighbor purity: {purity:.2f}% (sample size {sample_size}, k={TOP_K_NEIGHBORS})")
