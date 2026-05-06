@@ -25,7 +25,7 @@ from tqdm import tqdm
 
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 EMBEDDING_DIM = 384
-BATCH_SIZE = 256
+BATCH_SIZE = 264
 
 
 def connect_db():

@@ -1,0 +1,14 @@
+Loading model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights: 100% 199/199 [00:00<00:00, 1109.41it/s, Materializing param=pooler.dense.weight]
+BertModel LOAD REPORT from: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED	:can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+Connecting to database...
+Articles to embed: 73361
+100% 73361/73361 [14:12<00:00, 86.05article/s]
+Done.
