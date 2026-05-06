@@ -4,7 +4,7 @@ generate_embeddings.py
 Batch-generate embeddings for all articles in the Azure PostgreSQL DB and store
 them in the pgvector `embedding` column.
 
-Model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 (dim=384)
+Model: BAAI/bge-m3 (dim=1024)
 Fields used: title + lead + paragraphs concatenated
 
 Usage:
@@ -14,7 +14,6 @@ Usage:
 
 import argparse
 import json
-import os
 
 import psycopg2
 import psycopg2.extras
@@ -23,7 +22,6 @@ from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 
-load_dotenv()
 
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 EMBEDDING_DIM = 384
@@ -33,7 +31,7 @@ BATCH_SIZE = 256
 def connect_db():
     conn = psycopg2.connect(
         user="rtvdb",
-        password=os.getenv("DB_PASSWORD"),
+        password="Bravebutterfly2026",
         host="rtvdb.postgres.database.azure.com",
         port=5432,
         database="postgres",
@@ -46,26 +44,30 @@ def connect_db():
 
 
 def ensure_vector_column(conn):
-    """Cast the embedding column to vector(384) if it isn't already."""
+    """Ensure the embedding column is vector(EMBEDDING_DIM), altering it if needed."""
     cur = conn.cursor()
     cur.execute(
-        "SELECT data_type FROM information_schema.columns "
-        "WHERE table_name='articles' AND column_name='embedding';"
+        "SELECT pg_catalog.format_type(atttypid, atttypmod) "
+        "FROM pg_attribute JOIN pg_class ON pg_class.oid = pg_attribute.attrelid "
+        "WHERE pg_class.relname = 'articles' AND pg_attribute.attname = 'embedding';"
     )
     row = cur.fetchone()
+    cur.close()
     if row is None:
         raise RuntimeError("Column 'embedding' not found in table 'articles'.")
+
+    current_type = row[0].lower()
+    expected_type = f"vector({EMBEDDING_DIM})"
+    if current_type == expected_type:
+        return
+
+    print(f"Column is '{current_type}', converting to '{expected_type}' (existing embeddings will be cleared)...")
+    cur = conn.cursor()
+    cur.execute("UPDATE articles SET embedding = NULL;")
+    cur.execute(f"ALTER TABLE articles ALTER COLUMN embedding TYPE {expected_type} USING NULL;")
+    conn.commit()
     cur.close()
-    # pgvector type shows as 'USER-DEFINED'; if it's text/null we need to cast
-    if row[0].lower() not in ("user-defined",):
-        cur = conn.cursor()
-        cur.execute(
-            f"ALTER TABLE articles ALTER COLUMN embedding TYPE vector({EMBEDDING_DIM}) "
-            f"USING embedding::vector({EMBEDDING_DIM});"
-        )
-        conn.commit()
-        cur.close()
-        print(f"Converted embedding column to vector({EMBEDDING_DIM}).")
+    print(f"Converted embedding column to {expected_type}.")
 
 
 def fetch_unembedded_ids(conn, limit=None):
@@ -137,6 +139,7 @@ def update_embeddings_batch(conn, id_embedding_pairs):
 
 
 def main():
+    load_dotenv()   
     parser = argparse.ArgumentParser(description="Generate and store article embeddings")
     parser.add_argument("--limit", type=int, default=None, help="Max articles to process (for testing)")
     args = parser.parse_args()
