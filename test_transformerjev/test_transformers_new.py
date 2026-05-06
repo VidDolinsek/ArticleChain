@@ -23,6 +23,7 @@ TOPIC_SAMPLE_SIZE = 20
 TOP_K_NEIGHBORS = 50
 ENTITY_SAMPLE_SIZE = 10
 NEGATIVE_SAMPLE_TRIES = 50
+ENCODE_BATCH_SIZE = 1
 
 CONCAT_FIELDS = ("lead", "paragraphs", "keywords", "mention")
 
@@ -199,7 +200,7 @@ def main():
         print(f"Model: {model_name}")
 
         model = SentenceTransformer(model_name)
-        embeddings = model.encode(texts, normalize_embeddings=True, show_progress_bar=True)
+        embeddings = model.encode(texts, normalize_embeddings=True, show_progress_bar=True, batch_size=ENCODE_BATCH_SIZE)
 
         purity, sample_size = evaluate_topic_neighbor_purity(embeddings, topic_sets, rng)
         print(f"Topic neighbor purity: {purity:.2f}% (sample size {sample_size}, k={TOP_K_NEIGHBORS})")
