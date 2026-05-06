@@ -4,8 +4,8 @@ generate_embeddings.py
 Batch-generate embeddings for all articles in the Azure PostgreSQL DB and store
 them in the pgvector `embedding` column.
 
-Model: sentence-transformers/paraphrase-multilingual-mpnet-base-v2 (dim=768)
-Fields used: title (weight 1.2), lead (weight 1.0), paragraphs (weight 0.8)
+Model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 (dim=384)
+Fields used: title + lead + paragraphs concatenated
 
 Usage:
     python generate_embeddings.py              # embed all articles with NULL embedding
@@ -16,7 +16,6 @@ import argparse
 import json
 import os
 
-import numpy as np
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
@@ -27,9 +26,8 @@ from tqdm import tqdm
 load_dotenv()
 
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-EMBEDDING_DIM = 768
+EMBEDDING_DIM = 384
 BATCH_SIZE = 256
-FIELD_WEIGHTS = {"lead": 1.0, "paragraphs": 0.8}
 
 
 def connect_db():
@@ -48,7 +46,7 @@ def connect_db():
 
 
 def ensure_vector_column(conn):
-    """Cast the embedding column to vector(768) if it isn't already."""
+    """Cast the embedding column to vector(384) if it isn't already."""
     cur = conn.cursor()
     cur.execute(
         "SELECT data_type FROM information_schema.columns "
@@ -113,35 +111,12 @@ def fetch_articles_batch(conn, ids):
     return articles
 
 
-def normalize_embeddings(embeddings):
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    norms = np.where(norms == 0, 1.0, norms)
-    return embeddings / norms
-
-
-def compute_weighted_embeddings(model, articles):
-    """
-    Compute field-weighted, L2-normalized embeddings for a batch of articles.
-    Text exceeding the model's 512-token limit is truncated (not chunked).
-    Returns np.ndarray of shape (len(articles), EMBEDDING_DIM).
-    """
-    n = len(articles)
-    final = np.zeros((n, EMBEDDING_DIM), dtype=np.float32)
-    weight_sums = np.zeros((n, 1), dtype=np.float32)
-
-    for field, weight in FIELD_WEIGHTS.items():
-        texts = [a[field] for a in articles]
-        field_embs = model.encode(texts, show_progress_bar=False).astype(np.float32)
-        has_text = np.array(
-            [1.0 if t.strip() else 0.0 for t in texts], dtype=np.float32
-        )[:, None]
-        final += field_embs * weight * has_text
-        weight_sums += weight * has_text
-
-    weight_sums[weight_sums == 0] = 1.0 # so that the embedding entry remains 0 if no text was extracted
-    final = final / weight_sums # turn the weighted sum to a weighted average (normalization for the weights 0.8 and 1.0)
-    # normalize so dot product is equal to cosine similarity
-    return normalize_embeddings(final) # L2 normalization of the vector v/||v|| (vector devvided by L2 norm of vector)
+def compute_embeddings(model, articles):
+    texts = [
+        " ".join(part for part in (a["title"], a["lead"], a["paragraphs"]) if part.strip())
+        for a in articles
+    ]
+    return model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
 
 
 def update_embeddings_batch(conn, id_embedding_pairs):
@@ -196,7 +171,7 @@ def main():
                 pbar.update(len(batch_ids))
                 continue
 
-            embeddings = compute_weighted_embeddings(model, ordered_articles)
+            embeddings = compute_embeddings(model, ordered_articles)
             pairs = [(a["id"], emb) for a, emb in zip(ordered_articles, embeddings)] # pairs of id and embedding
             update_embeddings_batch(conn, pairs) # write to DB the embeddings of the batch of articles
 
