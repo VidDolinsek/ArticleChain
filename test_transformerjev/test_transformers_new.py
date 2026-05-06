@@ -25,7 +25,7 @@ ENTITY_SAMPLE_SIZE = 10
 NEGATIVE_SAMPLE_TRIES = 50
 ENCODE_BATCH_SIZE = 1
 
-CONCAT_FIELDS = ("lead", "paragraphs", "keywords", "mention")
+CONCAT_FIELDS = ("lead", "keywords", "mention", "paragraphs")
 
 MODEL_NAMES = [
     "BSC-LT/MrBERT",
@@ -200,6 +200,12 @@ def main():
         print(f"Model: {model_name}")
 
         model = SentenceTransformer(model_name)
+        
+        # Cap the max sequence length to prevent quadratic memory explosion with long texts
+        if not hasattr(model, "max_seq_length") or model.max_seq_length is None or model.max_seq_length > 512:
+            model.max_seq_length = 512
+            
+        embeddings = model.encode(texts, batch_size=16, normalize_embeddings=True, show_progress_bar=True)
         embeddings = model.encode(texts, normalize_embeddings=True, show_progress_bar=True, batch_size=ENCODE_BATCH_SIZE)
 
         purity, sample_size = evaluate_topic_neighbor_purity(embeddings, topic_sets, rng)
