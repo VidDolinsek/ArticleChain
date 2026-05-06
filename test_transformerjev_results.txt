@@ -1,0 +1,64 @@
+================================================================================
+Model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+Topic neighbor purity: 64.00% (sample size 20, k=50)
+Entity coherence:
+  Borut Pahor: count=52, intra=0.4085, inter=0.2637, coherence=0.1448
+  Donald Trump: count=127, intra=0.2950, inter=0.1435, coherence=0.1515
+  Ivana Kobilca: count=20, intra=0.5991, inter=0.2009, coherence=0.3981
+  Janja Garnbret: count=42, intra=0.5484, inter=0.1787, coherence=0.3697
+  Ljubljanski maraton: count=25, intra=0.6726, inter=0.2062, coherence=0.4664
+  Olimpijske igre: count=92, intra=0.4690, inter=0.2024, coherence=0.2666
+  Poplave 2023: count=15, intra=0.4269, inter=0.1624, coherence=0.2645
+  Tadej Pogačar: count=96, intra=0.5607, inter=0.1916, coherence=0.3691
+  Tour de France: count=38, intra=0.5464, inter=0.2081, coherence=0.3383
+  Vojna v Ukrajini: count=53, intra=0.3980, inter=0.2017, coherence=0.1963
+mean_coherence = 0.2965459201104121
+
+================================================================================
+Model: sentence-transformers/distiluse-base-multilingual-cased-v2
+Topic neighbor purity: 54.80% (sample size 20, k=50)
+Entity coherence:
+  Borut Pahor: count=52, intra=0.2176, inter=0.1254, coherence=0.0922
+  Donald Trump: count=127, intra=0.2551, inter=0.0943, coherence=0.1608
+  Ivana Kobilca: count=20, intra=0.4384, inter=0.1259, coherence=0.3125
+  Janja Garnbret: count=42, intra=0.4138, inter=0.1242, coherence=0.2896
+  Ljubljanski maraton: count=25, intra=0.5390, inter=0.1260, coherence=0.4130
+  Olimpijske igre: count=92, intra=0.3619, inter=0.1159, coherence=0.2460
+  Poplave 2023: count=15, intra=0.2685, inter=0.1145, coherence=0.1541
+  Tadej Pogačar: count=96, intra=0.3951, inter=0.1319, coherence=0.2632
+  Tour de France: count=38, intra=0.4104, inter=0.1137, coherence=0.2967
+  Vojna v Ukrajini: count=53, intra=0.2630, inter=0.0876, coherence=0.1754
+mean_coherence = 0.24034422994164334
+
+================================================================================
+Model: sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+Topic neighbor purity: 53.50% (sample size 20, k=50)
+Entity coherence:
+  Borut Pahor: count=52, intra=0.4763, inter=0.3083, coherence=0.1680
+  Donald Trump: count=127, intra=0.3084, inter=0.1884, coherence=0.1200
+  Ivana Kobilca: count=20, intra=0.6272, inter=0.2634, coherence=0.3638
+  Janja Garnbret: count=42, intra=0.5995, inter=0.2414, coherence=0.3581
+  Ljubljanski maraton: count=25, intra=0.6987, inter=0.2351, coherence=0.4636
+  Olimpijske igre: count=92, intra=0.4909, inter=0.2683, coherence=0.2226
+  Poplave 2023: count=15, intra=0.4927, inter=0.2429, coherence=0.2498
+  Tadej Pogačar: count=96, intra=0.6191, inter=0.2582, coherence=0.3608
+  Tour de France: count=38, intra=0.5853, inter=0.2803, coherence=0.3050
+  Vojna v Ukrajini: count=53, intra=0.4083, inter=0.2582, coherence=0.1501
+mean_coherence = 0.27619155825730707
+
+================================================================================
+Model: sentence-transformers/stsb-xlm-r-multilingual
+Topic neighbor purity: 56.70% (sample size 20, k=50)
+Entity coherence:
+  Borut Pahor: count=52, intra=0.4434, inter=0.2890, coherence=0.1544
+  Donald Trump: count=127, intra=0.3494, inter=0.2122, coherence=0.1372
+  Ivana Kobilca: count=20, intra=0.5646, inter=0.2867, coherence=0.2779
+  Janja Garnbret: count=42, intra=0.5987, inter=0.2910, coherence=0.3077
+  Ljubljanski maraton: count=25, intra=0.6390, inter=0.2923, coherence=0.3468
+  Olimpijske igre: count=92, intra=0.4662, inter=0.2702, coherence=0.1960
+  Poplave 2023: count=15, intra=0.5265, inter=0.2734, coherence=0.2531
+  Tadej Pogačar: count=96, intra=0.6163, inter=0.3037, coherence=0.3126
+  Tour de France: count=38, intra=0.6107, inter=0.2769, coherence=0.3338
+  Vojna v Ukrajini: count=53, intra=0.3776, inter=0.2548, coherence=0.1228
+mean_coherence = 0.2442282715106209
+

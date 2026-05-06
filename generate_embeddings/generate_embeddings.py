@@ -5,7 +5,7 @@ Batch-generate embeddings for all articles in the Azure PostgreSQL DB and store
 them in the pgvector `embedding` column.
 
 Model: sentence-transformers/paraphrase-multilingual-mpnet-base-v2 (dim=768)
-Fields used (DB columns only): lead (weight 1.0), paragraphs (weight 0.8)
+Fields used: title (weight 1.2), lead (weight 1.0), paragraphs (weight 0.8)
 
 Usage:
     python generate_embeddings.py              # embed all articles with NULL embedding
@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 load_dotenv()
 
-MODEL_NAME = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 EMBEDDING_DIM = 768
 BATCH_SIZE = 256
 FIELD_WEIGHTS = {"lead": 1.0, "paragraphs": 0.8}
@@ -84,24 +84,29 @@ def fetch_unembedded_ids(conn, limit=None):
 def fetch_articles_batch(conn, ids):
     cur = conn.cursor()
     cur.execute(
-        "SELECT id, lead, paragraphs FROM articles WHERE id = ANY(%s)",
+        "SELECT id, title, lead, paragraphs FROM articles WHERE id = ANY(%s)",
         (ids,)
     )
     rows = cur.fetchall()
     cur.close()
 
     articles = []
-    for article_id, lead, paragraphs_json in rows:
+    for article_id, title, lead, paragraphs_raw in rows:
         paragraphs_text = ""
-        if paragraphs_json:
-            try:
-                paragraphs = json.loads(paragraphs_json)
-                if isinstance(paragraphs, list):
-                    paragraphs_text = " ".join(str(p) for p in paragraphs if p)
-            except (json.JSONDecodeError, TypeError):
-                pass
+        if paragraphs_raw:
+            # paragraphs column may be text (JSON string) or jsonb (already a Python list)
+            if isinstance(paragraphs_raw, list):
+                paragraphs = paragraphs_raw
+            else:
+                try:
+                    paragraphs = json.loads(paragraphs_raw)
+                except (json.JSONDecodeError, TypeError):
+                    paragraphs = []
+            if isinstance(paragraphs, list):
+                paragraphs_text = " ".join(str(p) for p in paragraphs if p)
         articles.append({
             "id": article_id,
+            "title": title or "",
             "lead": lead or "",
             "paragraphs": paragraphs_text,
         })
