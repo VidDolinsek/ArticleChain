@@ -8,6 +8,9 @@ Two checks are reported per model:
    against inter-entity similarity with random negatives.
 """
 
+# Razlika od ostalih testerjev je da tukaj lead, keywords, mentions, paragraphs concateniramo v en string ki ga potem embedamo. 
+# Utezi simuliramo tako da veckrat zapored ponovimo posamezna polja (npr. 0.5 -> 5 ponovitev).
+
 from pathlib import Path
 import random
 import numpy as np
@@ -55,8 +58,9 @@ MODEL_NAMES = [
     # "sentence-transformers/stsb-xlm-r-multilingual",
     # "intfloat/multilingual-e5-large",
     # "BAAI/bge-large-zh-v1.5",
-    "BAAI/bge-m3",
-    "BAAI/bge-multilingual-gemma2",
+    # "BAAI/bge-m3",
+    # "BAAI/bge-multilingual-gemma2",
+
 ]
 
 NAMED_ENTITIES = [

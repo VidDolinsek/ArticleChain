@@ -8,6 +8,11 @@ Two checks are reported per model:
    against inter-entity similarity with random negatives.
 """
 
+
+# Razlika od ostalih testerjev je da tukaj paragrafe, preden overflowajo sequence max length, chunkamo in povprečimo njihove embeddinge. 
+
+
+
 from pathlib import Path
 import random
 import numpy as np
