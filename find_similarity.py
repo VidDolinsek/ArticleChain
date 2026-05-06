@@ -117,7 +117,7 @@ def find_similarity(article_id_1: str, article_id_2: str) -> dict:
     lead2 = article2["lead"]
     
     prompt = f"""
-Dobita dva novinarska članka v slovenščini.
+Dobiš dva novinarska članka v slovenščini.
 
 ČLANEK 1:
 Naslov: {title1}
@@ -133,12 +133,12 @@ NALOGA:
 Vrni SAMO veljavni JSON v tej obliki:
 {{
   "connection": "<največ 15 besed>",
-  "entities": ["entiteta1", "entiteta2"]
+  "entities": ["entiteta1", "entiteta2", ...]
 }}
 
 Pravila:
 - Največ 15 besed za "connection"
-- Napiši povedno razlago povezave med članki, ne samo naštevanje entitet
+- Napiši povedno razlago povezave med članki, ne naštevaj samo entitet
 - Osredotoči se na skupne poimenovane entitete ali jasno vsebinsko prekrivanje
 - Primer dobrega opisa: "Oba članka poročata o delovanju slovenske vlade in njenih predstavnikov"
 - Primer slabega opisa: "Skupne entitete: Golob, vlada"

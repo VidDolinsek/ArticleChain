@@ -12,7 +12,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
-from test_transformerjev import (
+from test_transformerjev.test_transformerjev import (
     DATASET_PATH,
     RANDOM_SEED,
     TOP_K_NEIGHBORS,

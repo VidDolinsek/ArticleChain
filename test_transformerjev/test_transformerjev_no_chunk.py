@@ -13,7 +13,7 @@ import random
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from read_yaml_data import read_yaml_exclude_urls
+from test_transformerjev.read_yaml_data import read_yaml
 
 
 
@@ -116,7 +116,7 @@ def normalize_embeddings(embeddings):
 
 def load_records(dataset_path: Path):
     """Load dataset arrays and build a record list for easy indexing."""
-    extraction = read_yaml_exclude_urls(str(dataset_path))
+    extraction = read_yaml(str(dataset_path))
     record_count = len(extraction["id"])
 
     records = []
@@ -319,12 +319,16 @@ def main():
         entity_results = evaluate_entity_coherence(embeddings, entity_blob, topic_sets, rng)
         print("Entity coherence:")
         entity_results = sorted(entity_results, key=lambda result: result["entity"].lower())
+        
+        mean_coherence = 0
+        divide = len(entity_results)
         for result in entity_results:
             entity = result["entity"]
             count = result["count"]
             intra = result["intra"]
             inter = result["inter"]
             coherence = result["coherence"]
+            mean_coherence += coherence
 
             if intra is None or inter is None or coherence is None:
                 print(f"  {entity}: not enough data for a stable score (count={count})")
@@ -334,7 +338,7 @@ def main():
                 f"  {entity}: count={count}, intra={intra:.4f}, "
                 f"inter={inter:.4f}, coherence={coherence:.4f}"
             )
-
+        print(f"mean_coherence = {mean_coherence/divide}")
 
 if __name__ == "__main__":
     main()

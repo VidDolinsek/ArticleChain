@@ -13,7 +13,7 @@ import random
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from read_yaml_data import read_yaml_exclude_urls
+from test_transformerjev.read_yaml_data import read_yaml_exclude_urls
 
 
 
@@ -21,11 +21,7 @@ from read_yaml_data import read_yaml_exclude_urls
 DATASET_PATH = Path("testing_dataset.yaml")
 RANDOM_SEED = 42
 TOPIC_SAMPLE_SIZE = 20
-<<<<<<< HEAD
-TOP_K_NEIGHBORS = 10
-=======
 TOP_K_NEIGHBORS = 50
->>>>>>> 95b7803 (add PDF generator, chunks)
 ENTITY_SAMPLE_SIZE = 10
 NEGATIVE_SAMPLE_TRIES = 50
 

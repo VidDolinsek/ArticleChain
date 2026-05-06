@@ -13,7 +13,7 @@ import psycopg2
 from psycopg2.extras import execute_batch
 from tqdm import tqdm
 
-from read_yaml_data import read_yaml
+from test_transformerjev.read_yaml_data import read_yaml
 
 
 UPSERT_SQL = """
