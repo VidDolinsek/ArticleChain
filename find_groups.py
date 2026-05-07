@@ -15,14 +15,12 @@ DB_NAME = "postgres"
 
 
 def _normalize(vectors: np.ndarray) -> np.ndarray:
-    """L2-normalize rows so dot product == cosine similarity."""
     norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    norms = np.where(norms == 0, 1e-10, norms)  # avoid div-by-zero
+    norms = np.where(norms == 0, 1e-10, norms)
     return vectors / norms
 
 
 def _project_out(residuals: np.ndarray, basis_vec: np.ndarray) -> None:
-    """Remove the component of residuals in the direction of basis_vec."""
     coeffs = residuals @ basis_vec
     residuals -= np.outer(coeffs, basis_vec)
 
@@ -135,10 +133,6 @@ def _fetch_candidate_articles(conn, article_id: str, limit: int) -> list[dict]:
         )
     return candidates
 
-# ─────────────────────────────────────────────────────────────
-# Approach 2 – Greedy Volume Maximisation (Gram determinant)
-# ─────────────────────────────────────────────────────────────
-
 def _greedy_volume_max_with_origin(
     origin_norm: np.ndarray,     # shape (d,), already normalized
     vectors_norm: np.ndarray,    # shape (n, d)
@@ -149,15 +143,9 @@ def _greedy_volume_max_with_origin(
     selected  = [seed_idx]
     remaining = list(range(n))
     remaining.remove(seed_idx)
-
-    # ── KEY CHANGE ──────────────────────────────────────────
-    # Start the basis with the origin itself, so all residuals
-    # measure "what does this add beyond the origin article?"
     residuals = vectors_norm.copy()
-    _project_out(residuals, origin_norm)   # <── project origin out first
-    # ────────────────────────────────────────────────────────
+    _project_out(residuals, origin_norm)
 
-    # now orthonormalise the seed candidate and project it out too
     new_basis_vec = residuals[seed_idx].copy()
     norm = np.linalg.norm(new_basis_vec)
     if norm > 1e-10:
@@ -223,30 +211,16 @@ def give_x_diverse_maxmin(
     return selected
 
 
-# ─────────────────────────────────────────────────────────────
-# Bonus – Relevance-weighted Volume (MMR-style DPP)
-# ─────────────────────────────────────────────────────────────
-
 def give_x_diverse_weighted(
     origin: np.ndarray,
     vectors: np.ndarray,
     x: int,
     relevance_weight: float = 0.3,
 ) -> list[int]:
-    """
-    Blend diversity (volume) with relevance to origin.
-
-    At each step, score = (1 - λ) · residual_norm  +  λ · relevance_to_origin
-
-    relevance_weight=0.0 → pure volume maximisation
-    relevance_weight=1.0 → pure relevance (no diversity)
-    relevance_weight=0.3 → recommended default
-    """
     origin_norm = _normalize(origin.reshape(1, -1))[0]
     vectors_norm = _normalize(vectors)
 
-    relevance = cos_sim(origin_norm.reshape(1, -1), vectors_norm)[0]   # (n,) in [-1, 1]
-    # normalise relevance to [0, 1]
+    relevance = cos_sim(origin_norm.reshape(1, -1), vectors_norm)[0]
     rel_min, rel_max = relevance.min(), relevance.max()
     rel_norm = (relevance - rel_min) / (rel_max - rel_min + 1e-10)
 
@@ -254,8 +228,6 @@ def give_x_diverse_weighted(
     selected = [seed]
     remaining = list(range(len(vectors_norm)))
     remaining.remove(seed)
-
-    # Use the same basis setup as volume: project origin out first.
     residuals = vectors_norm.copy()
     _project_out(residuals, origin_norm)
 
@@ -269,9 +241,7 @@ def give_x_diverse_weighted(
     for _ in range(x - 1):
         if not remaining:
             break
-
         res_norms = np.linalg.norm(residuals[remaining], axis=1)
-        # normalise residual norms to [0, 1]
         rn_min, rn_max = res_norms.min(), res_norms.max()
         res_norms_norm = (res_norms - rn_min) / (rn_max - rn_min + 1e-10)
 
@@ -290,11 +260,6 @@ def give_x_diverse_weighted(
         _project_out(residuals, new_basis_vec)
 
     return selected
-
-
-# ─────────────────────────────────────────────────────────────
-# Example usage
-# ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Find diverse article groups from DB.")
