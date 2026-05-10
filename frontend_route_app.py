@@ -119,14 +119,15 @@ if st.session_state.selected_option is not None and st.session_state.route_data 
         
         # Building the route sequentially using find_next
         for _ in range(n_steps - 1):
+            route_ids = tuple(a.id for a in route)
             cur = conn.cursor()
             cur.execute("""
                 WITH base AS (SELECT id, embedding, date FROM articles WHERE id = %s)
                 SELECT a.id, a.title, a.date, a.link, a.embedding::text
                 FROM articles a JOIN base b ON true
-                WHERE a.embedding IS NOT NULL AND a.date > b.date AND a.id <> b.id
+                WHERE a.embedding IS NOT NULL AND a.date > b.date AND a.id NOT IN %s
                 ORDER BY a.embedding <-> b.embedding LIMIT %s
-            """, (current.id, k_limit))
+            """, (current.id, route_ids, k_limit))
             rows = cur.fetchall()
             cur.close()
             
@@ -144,6 +145,9 @@ if st.session_state.selected_option is not None and st.session_state.route_data 
         # Call find_similarity.py function to get the actual LLM generated links 
         similarities = []
         for i in range(len(route) - 1):
+            if route[i].id == route[i+1].id:
+                similarities.append({"connection": "Isti članek.", "entities": []})
+                continue
             try:
                 sim = find_similarity(route[i].id, route[i+1].id)
                 similarities.append(sim)
@@ -166,10 +170,12 @@ if st.session_state.route_data is not None:
         else:
             st.caption(f"📅 {art.date}")
             
-        if i < len(similarities):
-            sim = similarities[i]
+        if i > 0:
+            sim = similarities[i-1]
             st.info(
-                f"**Povezava do naslednjega članka:** {sim.get('connection')}\n\n"
+                f"**Povezava s prejšnjim člankom:** {sim.get('connection')}\n\n"
                 f"**Skupne entitete:** {', '.join(sim.get('entities', []))}"
             )
+        else:
+            st.info("**Začetni članek:** Izbran na podlagi vaše iskalne poizvedbe.")
         st.divider()
