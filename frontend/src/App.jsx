@@ -90,10 +90,24 @@ const RouteSummaryBox = ({ summary, isLoading, llmEnabled }) => (
   </aside>
 );
 
-const RoutePreview = React.forwardRef(function RoutePreview({ article }, ref) {
+const RoutePreview = React.forwardRef(function RoutePreview({ article, onClick }, ref) {
+  const isInteractive = Boolean(onClick);
+
   return (
     <div className="route-preview-wrap">
-      <aside className="route-preview" aria-label="Izbran clanek" ref={ref}>
+      <aside 
+        className={`route-preview ${isInteractive ? 'interactive' : ''}`} 
+        aria-label="Izbran clanek" 
+        ref={ref}
+        onClick={(e) => {
+          if (isInteractive) {
+            e.stopPropagation();
+            onClick();
+          }
+        }}
+        role={isInteractive ? "button" : undefined}
+        tabIndex={isInteractive ? 0 : undefined}
+      >
         {article.thumbnail ? (
           <img src={article.thumbnail} alt="" />
         ) : (
@@ -129,11 +143,17 @@ const RouteChildNode = React.forwardRef(function RouteChildNode(
       )}
       <article
         ref={ref}
-        className="route-child-node"
-        onClick={onClick}
+        className={`route-child-node ${isInteractive ? 'interactive' : ''}`}
+        onClick={(e) => {
+          if (isInteractive) {
+            e.stopPropagation();
+            onClick();
+          }
+        }}
         onKeyDown={(e) => {
           if (isInteractive && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
+            e.stopPropagation();
             onClick();
           }
         }}
@@ -161,6 +181,7 @@ const RouteTree = ({
   onChainClick,
   isFetchingSummaries,
   llmEnabled,
+  onBack,
 }) => {
   const stageRef = useRef(null);
   const rootRef = useRef(null);
@@ -258,8 +279,19 @@ const RouteTree = ({
 
   return (
     <div className="route-stage" ref={stageRef}>
+      <button className="route-back-button" onClick={onBack} aria-label="Nazaj">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Nazaj
+      </button>
+
       {!selectedChainId && (
-        <RoutePreview article={rootArticle} ref={rootRef} />
+        <RoutePreview 
+          article={rootArticle} 
+          ref={rootRef} 
+          onClick={(rootArticle.url || rootArticle.link) ? () => window.open(rootArticle.url || rootArticle.link, '_blank') : undefined} 
+        />
       )}
 
       <svg className="route-branches" aria-hidden="true">
@@ -278,7 +310,7 @@ const RouteTree = ({
         style={{
           '--child-gap': `${childGap}px`,
           '--chain-gap': `${chainGap}px`,
-          '--child-size': `clamp(38px, calc((100svh - 158px - ${(rowCount - 1) * childGap}px) / ${rowCount} - 20px), 82px)`,
+          '--child-size': `clamp(38px, calc((100svh - 158px - ${(rowCount - 1) * childGap}px) / ${rowCount} - 20px), 140px)`,
           '--focused-child-size': 'clamp(120px, 18svh, 170px)',
         }}
       >
@@ -323,6 +355,7 @@ const RouteTree = ({
                   isSelected={row.isSelected}
                   onHoverChange={setHoveredChildId}
                   showScore={!isRoot}
+                  onClick={row.isSelected && (article.url || article.link) ? () => window.open(article.url || article.link, '_blank') : undefined}
                 />
               ))}
                 {!row.isSelected && (
@@ -559,6 +592,15 @@ function App() {
     setSelectedChainId(chainId);
   };
 
+  const handleRouteBack = () => {
+    if (selectedChainId) {
+      setSelectedChainId(null); // Go back to stage tree
+    } else {
+      setIsPinnedPreview(false); // Go back to search results
+      setIsClearingResults(false);
+    }
+  };
+
   const showingRouteStage = isPinnedPreview && selectedArticle;
   const displayedDiverseCount = Math.min(diverseCount, MAX_DIVERSE_COUNT);
 
@@ -623,6 +665,7 @@ function App() {
           onChainClick={handleChainClick}
           isFetchingSummaries={isFetchingSummaries}
           llmEnabled={useLlmOutputs}
+          onBack={handleRouteBack}
         />
       )}
 

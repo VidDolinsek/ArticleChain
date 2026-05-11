@@ -435,6 +435,53 @@ body.route-lock-scroll {
   -webkit-line-clamp: 4;
 }
 
+.route-preview.interactive {
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.route-preview.interactive:hover {
+  border-color: var(--app-route-line);
+  box-shadow: var(--app-card-shadow-hover);
+}
+
+.route-preview.interactive:focus-visible {
+  outline: 3px solid var(--app-brand-ring);
+  outline-offset: 3px;
+}
+
+.route-back-button {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--app-panel);
+  color: var(--app-text);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  box-shadow: var(--app-card-shadow);
+  font-weight: 600;
+  font-size: 15px;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.route-back-button:hover {
+  background: var(--app-bg);
+  transform: translateY(-1px);
+  box-shadow: var(--app-card-shadow-hover);
+}
+
+.route-back-button:focus-visible {
+  outline: 3px solid var(--app-brand-ring);
+  outline-offset: 3px;
+}
+
 .route-node-date {
   display: block;
   width: 100%;
