@@ -16,7 +16,7 @@ from find_groups import (
     _parse_embedding,
 )
 from find_next import get_next
-from find_similarity import find_similarity_from_articles
+from find_similarity import find_similarity_from_articles, set_llm_similarity_enabled
 
 load_dotenv()
 
@@ -292,6 +292,18 @@ def build_similarities(
     return [item for item in results if item is not None]
 
 
+def build_disabled_similarities(route: List[ArticleEmbedding]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "from": prev.id,
+            "to": nxt.id,
+            "connection": "LLM izklopljen za predogled vizualizacije.",
+            "entities": [],
+        }
+        for prev, nxt in zip(route, route[1:])
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build an article route with explanations.")
     parser.add_argument("article_id", help="Origin article ID")
@@ -325,6 +337,11 @@ def main() -> None:
         default="route.json",
         help="Output JSON file path",
     )
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Skip LLM explanations and write placeholder similarities.",
+    )
     args = parser.parse_args()
 
     if args.steps < 1:
@@ -357,7 +374,12 @@ def main() -> None:
         selected = options[choice - 1]
 
         route = build_route(conn, cache, origin, selected, args.steps, args.limit)
-        similarities = build_similarities(conn, cache, route)
+        set_llm_similarity_enabled(not args.no_llm)
+        similarities = (
+            build_disabled_similarities(route)
+            if args.no_llm
+            else build_similarities(conn, cache, route)
+        )
 
         output = {
             "params": {
@@ -367,6 +389,7 @@ def main() -> None:
                 "steps_completed": max(0, len(route) - 1),
                 "method": args.method,
                 "weight": args.weight if args.method == "weighted" else None,
+                "llm_enabled": not args.no_llm,
             },
             "origin": origin.to_dict(),
             "options": [a.to_dict() for a in options],

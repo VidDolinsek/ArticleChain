@@ -8,6 +8,7 @@ Run with:
 
 import os
 import sys
+import json
 import numpy as np
 import streamlit as st
 from types import SimpleNamespace
@@ -19,7 +20,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from query_to_recommendation.recommender import load_model, connect_db, embed_query, search_articles
 from find_groups import give_x_diverse_volume, _parse_embedding
 from find_next import get_next
-from find_similarity import find_similarity
+from find_similarity import (
+    find_similarity_from_articles,
+    find_similarity_from_all_articles,
+    set_llm_similarity_enabled,
+)
 
 load_dotenv()
 
@@ -29,6 +34,44 @@ st.set_page_config(page_title="Route Recommender", layout="wide")
 def get_model():
     """Load the model used to generate embeddings (cached)."""
     return load_model()
+
+
+def fetch_route_article_texts(conn, route):
+    """Fetch article bodies once so the LLM prompts can reuse them."""
+    if not route:
+        return {}
+
+    article_ids = tuple(article.id for article in route)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, title, lead, paragraphs FROM articles WHERE id IN %s",
+        (article_ids,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+
+    texts = {}
+    for article_id, title, lead, paragraphs_json in rows:
+        paragraphs = []
+        if paragraphs_json:
+            if isinstance(paragraphs_json, list):
+                paragraphs = paragraphs_json
+            elif isinstance(paragraphs_json, str):
+                try:
+                    paragraphs = json.loads(paragraphs_json)
+                except json.JSONDecodeError:
+                    paragraphs = []
+            else:
+                paragraphs = [str(paragraphs_json)]
+
+        texts[article_id] = {
+            "title": title,
+            "lead": lead,
+            "paragraphs": paragraphs,
+        }
+
+    return texts
+
 
 # --- UI Flow ---
 
@@ -50,7 +93,14 @@ with col1:
 with col2:
     x_distinct = st.slider("Distinct Options (x)", min_value=1, max_value=15, value=5)
 with col3:
-    n_steps = st.slider("Route Steps (n)", min_value=1, max_value=10, value=3)
+    n_steps = st.slider("Route Steps (n)", min_value=1, max_value=10, value=5)
+
+enable_llm = st.checkbox(
+    "Generate LLM similarities",
+    value=False,
+    help="Turn this on only when you want explanation text. Leave it off to preview visuals quickly.",
+)
+set_llm_similarity_enabled(enable_llm)
 
 if st.button("🔍 Search Options", type="primary"):
     if not query.strip():
@@ -111,7 +161,12 @@ if st.session_state.options and st.session_state.selected_option is None:
                 st.rerun()
 
 if st.session_state.selected_option is not None and st.session_state.route_data is None:
-    with st.spinner("Building route and generating LLM similarities..."):
+    spinner_text = (
+        "Building route and generating LLM similarities..."
+        if enable_llm
+        else "Building route without LLM similarities..."
+    )
+    with st.spinner(spinner_text):
         conn = connect_db()
         
         route = [st.session_state.selected_option]
@@ -142,26 +197,55 @@ if st.session_state.selected_option is not None and st.session_state.route_data 
             current = get_next(current, cands)
             route.append(current)
 
-        # Call find_similarity.py function to get the actual LLM generated links 
-        similarities = []
-        for i in range(len(route) - 1):
-            if route[i].id == route[i+1].id:
-                similarities.append({"connection": "Isti članek.", "entities": []})
-                continue
+        if enable_llm:
+            # Fetch text once and ask the LLM for adjacent links plus a full-route summary.
+            article_texts = fetch_route_article_texts(conn, route)
+            similarities = []
+            for i in range(len(route) - 1):
+                current_text = article_texts.get(route[i].id)
+                next_text = article_texts.get(route[i + 1].id)
+                if not current_text or not next_text:
+                    similarities.append({"connection": "Besedilo članka manjka.", "entities": []})
+                    continue
+                try:
+                    similarities.append(find_similarity_from_articles(current_text, next_text))
+                except Exception as e:
+                    similarities.append({"connection": f"Error formatting via LLM: {e}", "entities": []})
+
+            route_articles = [
+                article_texts[article.id]
+                for article in route[:5]
+                if article.id in article_texts
+            ]
             try:
-                sim = find_similarity(route[i].id, route[i+1].id)
-                similarities.append(sim)
+                route_similarity = find_similarity_from_all_articles(route_articles)
             except Exception as e:
-                similarities.append({"connection": f"Error formatting via LLM: {e}", "entities": []})
+                route_similarity = {"connection": f"Error formatting via LLM: {e}", "entities": []}
+        else:
+            similarities = [
+                {
+                    "connection": "LLM izklopljen za predogled vizualizacije.",
+                    "entities": [],
+                }
+                for _ in range(len(route) - 1)
+            ]
+            route_similarity = None
 
         conn.close()
         
-        st.session_state.route_data = {"route": route, "similarities": similarities}
+        st.session_state.route_data = {
+            "route": route,
+            "similarities": similarities,
+            "route_similarity": route_similarity,
+            "llm_enabled": enable_llm,
+        }
 
 if st.session_state.route_data is not None:
     st.success("Route generated successfully!")
     route = st.session_state.route_data["route"]
     similarities = st.session_state.route_data["similarities"]
+    route_similarity = st.session_state.route_data.get("route_similarity")
+    llm_enabled = st.session_state.route_data.get("llm_enabled", True)
     
     for i, art in enumerate(route):
         st.markdown(f"### {i+1}. {art.title}")
@@ -179,3 +263,12 @@ if st.session_state.route_data is not None:
         else:
             st.info("**Začetni članek:** Izbran na podlagi vaše iskalne poizvedbe.")
         st.divider()
+
+    if route_similarity:
+        st.write("## Skupna povezava med vsemi članki v poti")
+        st.info(
+            f"**Povezava:** {route_similarity.get('connection')}\n\n"
+            f"**Skupne entitete:** {', '.join(route_similarity.get('entities', []))}"
+        )
+    elif not llm_enabled:
+        st.caption("LLM similarities are turned off for this preview.")
