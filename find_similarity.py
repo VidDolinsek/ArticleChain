@@ -87,7 +87,6 @@ def _call_similarity_llm(prompt: str) -> dict:
             {"role": "user", "content": prompt}
         ],
         temperature=0.2,
-        timeout=60.0
     )
 
     content = response.choices[0].message.content.strip()
@@ -180,12 +179,10 @@ def find_similarity_from_all_articles(articles: list[dict]) -> dict:
     for idx, article in enumerate(articles, start=1):
         title = article.get("title") or ""
         lead = article.get("lead") or ""
-        text = _article_text(article)
         article_blocks.append(
             f"""ČLANEK {idx}:
 Naslov: {title}
-Uvod: {lead}
-Besedilo: {text}"""
+Uvod: {lead}"""
         )
 
     joined_articles = "\n\n".join(article_blocks)

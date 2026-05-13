@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 
 const MAX_DIVERSE_COUNT = 7;
@@ -72,10 +72,12 @@ const ArticleCard = React.forwardRef(function ArticleCard(
   );
 });
 
-const RouteSummaryBox = ({ summary, isLoading, llmEnabled }) => (
+const RouteSummaryBox = ({ summary, isLoading, isChainLoading, llmEnabled }) => (
   <aside className="route-summary-box">
     <strong>Skupna povezava</strong>
-    {!llmEnabled ? (
+    {isChainLoading ? (
+      <p>Nalagam celotno verigo...</p>
+    ) : !llmEnabled ? (
       <p>LLM povezave so izklopljene.</p>
     ) : isLoading && !summary ? (
       <p>Generiram razlago...</p>
@@ -121,11 +123,12 @@ const RoutePreview = React.forwardRef(function RoutePreview({ article, onClick }
 });
 
 const RouteChildNode = React.forwardRef(function RouteChildNode(
-  { article, isHovered, isSelected, onClick, onHoverChange, showScore = true },
+  { article, isHovered, isSelected, onClick, onLinkClick, onHoverChange, showScore = true, showText = true },
   ref,
 ) {
   const branchColor = getSimilarityColor(article.score);
   const isInteractive = Boolean(onClick);
+  const hasArticleLink = Boolean(article.url || article.link);
 
   return (
     <div
@@ -166,12 +169,34 @@ const RouteChildNode = React.forwardRef(function RouteChildNode(
         ) : (
           <div className="route-child-placeholder" />
         )}
-        <h3>{article.title}</h3>
+        {showText && <h3>{article.title}</h3>}
       </article>
-      <time className="route-node-date">{formatArticleDate(article.date)}</time>
+      {showText && <time className="route-node-date">{formatArticleDate(article.date)}</time>}
+      {showText && hasArticleLink && (
+        <button
+          type="button"
+          className="route-article-link"
+          onClick={(e) => {
+            e.stopPropagation();
+            onLinkClick();
+          }}
+        >
+          Povezava do članka
+        </button>
+      )}
     </div>
   );
 });
+
+const RouteFirstLinkInfo = ({ article }) => (
+  <div className="route-first-link-info">
+    <h3>{article.title}</h3>
+    <div className="route-first-link-meta">
+      <time>{formatArticleDate(article.date)}</time>
+      <span>Ujemanje {formatSimilarityScore(article.score)}</span>
+    </div>
+  </div>
+);
 
 const RouteTree = ({
   rootArticle,
@@ -181,6 +206,7 @@ const RouteTree = ({
   onChainClick,
   isFetchingSummaries,
   llmEnabled,
+  onArticleRestart,
   onBack,
 }) => {
   const stageRef = useRef(null);
@@ -192,12 +218,14 @@ const RouteTree = ({
     () => childArticles.map((article, rowIndex) => {
       const chainArticles = [article, ...(article.chain || [])];
       const isSelected = selectedChainId === article.id;
-      const visibleArticles = isSelected ? [rootArticle, ...chainArticles] : chainArticles;
+      const visibleArticles = isSelected ? [rootArticle, ...chainArticles] : [article];
 
       return {
         chainId: article.id,
         isSelected,
         summary: article.route_summary,
+        chainReady: Boolean(article.chain_ready),
+        summaryReady: Boolean(article.summary_ready),
         nodes: visibleArticles.map((routeArticle, nodeIndex) => ({
           article: routeArticle,
           isRoot: isSelected && nodeIndex === 0,
@@ -211,7 +239,7 @@ const RouteTree = ({
   const childGap = 9;
   const chainGap = 36;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const measureBranches = () => {
       if (!stageRef.current || routeRows.length === 0) {
         setBranches([]);
@@ -268,11 +296,17 @@ const RouteTree = ({
       setBranches(nextBranches);
     };
 
-    const frame = window.requestAnimationFrame(measureBranches);
+    measureBranches();
+    const frame = window.requestAnimationFrame(() => {
+      measureBranches();
+      window.requestAnimationFrame(measureBranches);
+    });
+    const settledTimer = window.setTimeout(measureBranches, 320);
     window.addEventListener('resize', measureBranches);
 
     return () => {
       window.cancelAnimationFrame(frame);
+      window.clearTimeout(settledTimer);
       window.removeEventListener('resize', measureBranches);
     };
   }, [routeRows, selectedChainId]);
@@ -335,7 +369,8 @@ const RouteTree = ({
               {row.isSelected && (
                 <RouteSummaryBox
                   summary={row.summary}
-                  isLoading={isFetchingSummaries}
+                  isLoading={isFetchingSummaries && !row.summaryReady}
+                  isChainLoading={!row.chainReady}
                   llmEnabled={llmEnabled}
                 />
               )}
@@ -355,15 +390,13 @@ const RouteTree = ({
                   isSelected={row.isSelected}
                   onHoverChange={setHoveredChildId}
                   showScore={!isRoot}
-                  onClick={row.isSelected && (article.url || article.link) ? () => window.open(article.url || article.link, '_blank') : undefined}
+                  showText={row.isSelected}
+                  onClick={row.isSelected ? () => onArticleRestart(article) : undefined}
+                  onLinkClick={() => window.open(article.url || article.link, '_blank')}
                 />
               ))}
                 {!row.isSelected && (
-                  <RouteSummaryBox
-                    summary={row.summary}
-                    isLoading={isFetchingSummaries}
-                    llmEnabled={llmEnabled}
-                  />
+                  <RouteFirstLinkInfo article={row.nodes[0].article} />
                 )}
               </div>
             </div>
@@ -391,9 +424,9 @@ function App() {
   const [selectedChainId, setSelectedChainId] = useState(null);
   const [useLlmOutputs, setUseLlmOutputs] = useState(true);
   const [isFetchingSummaries, setIsFetchingSummaries] = useState(false);
+  const [chainJobId, setChainJobId] = useState(null);
   const selectedAnchorRef = useRef(null);
   const pinTimerRef = useRef(null);
-  const summaryRequestRef = useRef(0);
 
   const orderedResults = useMemo(() => {
     if (!selectedArticle) return results;
@@ -426,6 +459,45 @@ function App() {
   }, [isPinnedPreview]);
 
   useEffect(() => () => window.clearTimeout(pinTimerRef.current), []);
+
+  useEffect(() => {
+    if (!chainJobId) return undefined;
+
+    let isCancelled = false;
+    let pollTimer = null;
+
+    const pollChainJob = async () => {
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/api/chain-jobs/${chainJobId}`);
+        if (!response.ok) throw new Error('Chain job polling failed');
+        const data = await response.json();
+        if (isCancelled) return;
+
+        setDiverseResults(data.results || []);
+        setIsFetchingSummaries(data.status === 'loading_summaries');
+
+        if (data.status === 'complete' || data.status === 'error') {
+          setChainJobId(null);
+          setIsFetchingSummaries(false);
+          return;
+        }
+
+        pollTimer = window.setTimeout(pollChainJob, 1200);
+      } catch (error) {
+        console.error('Error polling chain job:', error);
+        if (!isCancelled) {
+          pollTimer = window.setTimeout(pollChainJob, 1800);
+        }
+      }
+    };
+
+    pollTimer = window.setTimeout(pollChainJob, 700);
+
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(pollTimer);
+    };
+  }, [chainJobId]);
 
   const clearPinTimer = () => {
     window.clearTimeout(pinTimerRef.current);
@@ -460,7 +532,7 @@ function App() {
       setDiverseResults([]);
       setSelectedChainId(null);
       setIsFetchingSummaries(false);
-      summaryRequestRef.current += 1;
+      setChainJobId(null);
       setIsPinnedPreview(false);
       setIsClearingResults(false);
     } catch (error) {
@@ -479,7 +551,7 @@ function App() {
     setDiverseResults([]);
     setSelectedChainId(null);
     setIsFetchingSummaries(false);
-    summaryRequestRef.current += 1;
+    setChainJobId(null);
     setError('');
     setIsPinnedPreview(false);
     setIsClearingResults(false);
@@ -491,92 +563,39 @@ function App() {
     setDiverseResults([]);
     setSelectedChainId(null);
     setIsFetchingSummaries(false);
-    summaryRequestRef.current += 1;
+    setChainJobId(null);
     setError('');
     setIsPinnedPreview(false);
     setIsClearingResults(false);
     clearPinTimer();
   };
 
-  const handleConfirmDiverse = async () => {
-    if (!selectedArticle) return;
+  const fetchDiverseForArticle = async (baseArticle, { pinDelay = 180 } = {}) => {
+    if (!baseArticle) return;
 
+    setSelectedArticle(baseArticle);
     setIsFetchingDiverse(true);
     setIsFetchingSummaries(false);
+    setChainJobId(null);
     setError('');
     setIsClearingResults(true);
     setSelectedChainId(null);
-    summaryRequestRef.current += 1;
+    setDiverseResults([]);
     const requestedCount = Math.min(diverseCount, MAX_DIVERSE_COUNT);
     clearPinTimer();
     pinTimerRef.current = window.setTimeout(() => {
       setIsPinnedPreview(true);
-    }, 180);
+    }, pinDelay);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/diverse?article_id=${encodeURIComponent(selectedArticle.id)}&x=${requestedCount}`);
+      const response = await fetch(`http://127.0.0.1:8000/api/diverse?article_id=${encodeURIComponent(baseArticle.id)}&x=${requestedCount}&include_llm=${useLlmOutputs}`);
       if (!response.ok) throw new Error('Diverse request failed');
       const data = await response.json();
       const nextResults = data.results || [];
       setDiverseResults(nextResults);
+      setChainJobId(data.job_id || null);
+      setIsFetchingSummaries(false);
       setIsFetchingDiverse(false);
-
-      if (useLlmOutputs && nextResults.length > 0) {
-        const requestId = summaryRequestRef.current + 1;
-        summaryRequestRef.current = requestId;
-        setIsFetchingSummaries(true);
-
-        try {
-          const summaryResponse = await fetch('http://127.0.0.1:8000/api/chain-summaries', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              include_llm: true,
-              paths: nextResults.map((article) => [
-                selectedArticle.id,
-                article.id,
-                ...(article.chain || []).map((chainArticle) => chainArticle.id),
-              ]),
-            }),
-          });
-          if (!summaryResponse.ok) throw new Error('Chain summary request failed');
-          const summaryData = await summaryResponse.json();
-          if (summaryRequestRef.current === requestId) {
-            const summariesByIndex = new Map(
-              (summaryData.summaries || []).map((summary) => [
-                summary.index,
-                summary.route_similarity,
-              ]),
-            );
-
-            setDiverseResults((currentResults) => (
-              currentResults.map((article, index) => ({
-                ...article,
-                route_summary: summariesByIndex.get(index) || article.route_summary,
-              }))
-            ));
-          }
-        } catch (summaryError) {
-          console.error('Error fetching chain summaries:', summaryError);
-          if (summaryRequestRef.current === requestId) {
-            setDiverseResults((currentResults) => (
-              currentResults.map((article) => ({
-                ...article,
-                route_summary: {
-                  connection: 'Pri generiranju LLM povezave je prislo do napake.',
-                  entities: [],
-                },
-              }))
-            ));
-          }
-        } finally {
-          if (summaryRequestRef.current === requestId) {
-            setIsFetchingSummaries(false);
-          }
-        }
-      }
     } catch (error) {
       console.error('Error fetching diverse options:', error);
       setError('Pri pridobivanju raznolikih clankov je prislo do napake.');
@@ -586,6 +605,14 @@ function App() {
     } finally {
       setIsFetchingDiverse(false);
     }
+  };
+
+  const handleConfirmDiverse = () => {
+    fetchDiverseForArticle(selectedArticle);
+  };
+
+  const handleRouteArticleRestart = (article) => {
+    fetchDiverseForArticle(article, { pinDelay: 0 });
   };
 
   const handleChainClick = (chainId) => {
@@ -665,6 +692,7 @@ function App() {
           onChainClick={handleChainClick}
           isFetchingSummaries={isFetchingSummaries}
           llmEnabled={useLlmOutputs}
+          onArticleRestart={handleRouteArticleRestart}
           onBack={handleRouteBack}
         />
       )}

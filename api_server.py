@@ -1,6 +1,10 @@
 import os
 import sys
 import json
+import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from copy import deepcopy
+from threading import Lock
 from types import SimpleNamespace
 
 import numpy as np
@@ -29,6 +33,9 @@ app.add_middleware(
 model = None
 CHAIN_LENGTH = 5
 CHAIN_CANDIDATE_LIMIT = 100
+CHAIN_JOBS = {}
+CHAIN_JOBS_LOCK = Lock()
+BACKGROUND_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
 class RouteExplanationRequest(BaseModel):
@@ -145,6 +152,34 @@ def _summarize_article_path(article_texts, article_ids):
         }
 
 
+def _create_chain_job(initial_results):
+    job_id = str(uuid.uuid4())
+    with CHAIN_JOBS_LOCK:
+        CHAIN_JOBS[job_id] = {
+            "id": job_id,
+            "status": "loading_chains",
+            "chains_ready": False,
+            "summaries_ready": False,
+            "results": initial_results,
+            "error": None,
+        }
+    return job_id
+
+
+def _update_chain_job(job_id, **updates):
+    with CHAIN_JOBS_LOCK:
+        job = CHAIN_JOBS.get(job_id)
+        if not job:
+            return
+        job.update(updates)
+
+
+def _get_chain_job(job_id):
+    with CHAIN_JOBS_LOCK:
+        job = CHAIN_JOBS.get(job_id)
+        return deepcopy(job) if job else None
+
+
 def _build_article_chain(conn, start_article, length=CHAIN_LENGTH):
     chain = []
     current_article = start_article
@@ -185,6 +220,88 @@ def _build_article_chain(conn, start_article, length=CHAIN_LENGTH):
         current_article = next_article
 
     return chain
+
+
+def _build_chain_summaries(conn, paths, include_llm):
+    if not include_llm:
+        return [_disabled_similarity() for _ in paths]
+
+    all_article_ids = _ordered_unique_ids(
+        article_id
+        for path in paths
+        for article_id in path
+    )
+    article_texts = _fetch_article_texts(conn, all_article_ids)
+    summaries = [None] * len(paths)
+    max_workers = min(5, len(paths))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {
+            executor.submit(_summarize_article_path, article_texts, path): index
+            for index, path in enumerate(paths)
+        }
+        for future in as_completed(future_map):
+            summaries[future_map[future]] = future.result()
+
+    return summaries
+
+
+def _preload_chains_and_summaries(job_id, base_article, selected_articles, include_llm):
+    conn = connect_db()
+    full_results = []
+    try:
+        for index, article in enumerate(selected_articles):
+            formatted_article = _format_article(
+                article,
+                _cosine_similarity(base_article["embedding"], article["embedding"]),
+            )
+            formatted_article["chain"] = _build_article_chain(conn, article)
+            formatted_article["chain_ready"] = True
+            formatted_article["summary_ready"] = False
+            full_results.append(formatted_article)
+
+            current_job = _get_chain_job(job_id)
+            if current_job:
+                current_results = current_job["results"]
+                current_results[index] = formatted_article
+                _update_chain_job(job_id, results=current_results)
+
+        _update_chain_job(
+            job_id,
+            status="loading_summaries" if include_llm else "complete",
+            chains_ready=True,
+            summaries_ready=not include_llm,
+            results=full_results,
+        )
+
+        if include_llm:
+            paths = [
+                [
+                    base_article["id"],
+                    article["id"],
+                    *(chain_article["id"] for chain_article in article.get("chain", [])),
+                ]
+                for article in full_results
+            ]
+            summaries = _build_chain_summaries(conn, paths, include_llm)
+            for article, summary in zip(full_results, summaries):
+                article["route_summary"] = summary
+                article["summary_ready"] = True
+
+            _update_chain_job(
+                job_id,
+                status="complete",
+                summaries_ready=True,
+                results=full_results,
+            )
+    except Exception as exc:
+        _update_chain_job(
+            job_id,
+            status="error",
+            error=str(exc),
+        )
+    finally:
+        conn.close()
 
 @app.on_event("startup")
 def startup_event():
@@ -269,10 +386,18 @@ def chain_summaries(payload: ChainSummaryRequest):
         ]
     }
 
+@app.get("/api/chain-jobs/{job_id}")
+def chain_job(job_id: str):
+    job = _get_chain_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Chain job not found")
+    return job
+
 @app.get("/api/diverse")
 def diverse_articles(
     article_id: str = Query(..., description="ID izbranega članka"),
     x: int = Query(5, ge=3, le=7, description="Število raznolikih člankov"),
+    include_llm: bool = Query(True, description="Ali naj ozadje pripravi LLM razlage"),
 ):
     conn = connect_db()
     try:
@@ -296,9 +421,24 @@ def diverse_articles(
                 art,
                 _cosine_similarity(base["embedding"], art["embedding"]),
             )
-            formatted_article["chain"] = _build_article_chain(conn, art)
+            formatted_article["chain"] = []
+            formatted_article["chain_ready"] = False
+            formatted_article["summary_ready"] = False
             results.append(formatted_article)
 
-        return {"results": results}
+        job_id = _create_chain_job(results)
+        BACKGROUND_EXECUTOR.submit(
+            _preload_chains_and_summaries,
+            job_id,
+            base,
+            selected,
+            include_llm,
+        )
+
+        return {
+            "results": results,
+            "job_id": job_id,
+            "status": "loading_chains",
+        }
     finally:
         conn.close()

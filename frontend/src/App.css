@@ -93,10 +93,10 @@ body.route-lock-scroll {
 }
 
 .app-container.has-pinned-preview {
-  --preview-left: 8px;
+  --preview-left: max(24px, calc((100vw - 1120px) / 2));
   --preview-size: 220px;
-  --tree-gap: 170px;
-  --stage-pad: 28px;
+  --tree-gap: 190px;
+  --stage-pad: 32px;
 }
 
 .app-container.centered-layout {
@@ -624,6 +624,46 @@ body.route-lock-scroll {
   overflow: visible;
 }
 
+.route-first-link-info {
+  width: clamp(230px, 28vw, 420px);
+  min-height: var(--node-size);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2px 0;
+  box-sizing: border-box;
+}
+
+.route-first-link-info h3 {
+  margin: 0 0 10px;
+  color: var(--app-heading);
+  font-size: clamp(17px, 1.8vw, 24px);
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.route-first-link-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.route-first-link-meta time,
+.route-first-link-meta span {
+  color: var(--app-muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.route-first-link-meta span {
+  color: var(--app-success);
+  background: var(--app-success-bg);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
 .route-tree-row:focus-visible {
   outline: 3px solid var(--app-brand-ring);
   outline-offset: 8px;
@@ -819,6 +859,34 @@ body.route-lock-scroll {
   font-size: 15px;
 }
 
+.route-article-link {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 8px;
+  color: var(--app-success);
+  background: var(--app-success-bg);
+  border: 1px solid color-mix(in srgb, var(--app-success) 26%, transparent);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.route-article-link:hover {
+  color: white;
+  background: var(--app-success);
+  transform: translateY(-1px);
+}
+
+.route-article-link:focus-visible {
+  outline: 3px solid var(--app-brand-ring);
+  outline-offset: 3px;
+}
+
 .article-thumb {
   width: 150px;
   height: 100px;
@@ -892,18 +960,18 @@ body.route-lock-scroll {
 
 @media (max-width: 1180px) {
   .app-container.has-pinned-preview {
-    --preview-left: 6px;
+    --preview-left: max(20px, calc((100vw - 1010px) / 2));
     --preview-size: 190px;
-    --tree-gap: 145px;
+    --tree-gap: 165px;
     --stage-pad: 18px;
   }
 }
 
 @media (max-width: 760px) {
   .app-container.has-pinned-preview {
-    --preview-left: 6px;
+    --preview-left: 14px;
     --preview-size: 150px;
-    --tree-gap: 70px;
+    --tree-gap: 74px;
     --stage-pad: 10px;
   }
 
@@ -924,9 +992,9 @@ body.route-lock-scroll {
 
 @media (max-width: 560px) {
   .app-container.has-pinned-preview {
-    --preview-left: 5px;
+    --preview-left: 10px;
     --preview-size: 120px;
-    --tree-gap: 36px;
+    --tree-gap: 42px;
     --stage-pad: 8px;
   }
 
