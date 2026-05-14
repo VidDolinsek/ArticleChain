@@ -1,0 +1,17 @@
+transformer,neighborhood_purity_pct,mean_coherence
+sentence-transformers/all-MiniLM-L6-v2,38.00,0.07348
+sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2,53.50,0.24910
+sentence-transformers/all-mpnet-base-v2,36.50,0.08426
+embaas/sentence-transformers-e5-large-v2,66.00,0.02912
+sentence-transformers/distiluse-base-multilingual-cased-v2,63.50,0.19262
+sentence-transformers/paraphrase-multilingual-mpnet-base-v2,58.50,0.24776
+sentence-transformers/stsb-xlm-r-multilingual,62.00,0.19052
+intfloat/multilingual-e5-large,68.00,0.04643
+sentence-transformers/all-MiniLM-L6-v2,31.40,0.07348
+sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2,49.20,0.24910
+sentence-transformers/all-mpnet-base-v2,31.60,0.08426
+embaas/sentence-transformers-e5-large-v2,53.30,0.02912
+sentence-transformers/distiluse-base-multilingual-cased-v2,51.20,0.19262
+sentence-transformers/paraphrase-multilingual-mpnet-base-v2,46.60,0.24776
+sentence-transformers/stsb-xlm-r-multilingual,51.80,0.19052
+intfloat/multilingual-e5-large,53.40,

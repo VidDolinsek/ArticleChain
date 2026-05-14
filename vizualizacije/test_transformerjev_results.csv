@@ -1,0 +1,5 @@
+transformer,neighborhood_purity (%),mean_coherence
+sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 (k=50),64.00,0.29655
+sentence-transformers/distiluse-base-multilingual-cased-v2 (k=50),54.80,0.24034
+sentence-transformers/paraphrase-multilingual-mpnet-base-v2 (k=50),53.50,0.27619
+sentence-transformers/stsb-xlm-r-multilingual (k=50),56.70,0.24423

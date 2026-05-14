@@ -98,8 +98,10 @@ def _fetch_candidate_articles(conn, article_id: str, limit: int) -> list[dict]:
             SELECT
                 a.id,
                 a.title,
+                a.lead,
                 a.date,
                 a.link,
+                a.thumbnail,
                 a.embedding::text
             FROM articles a
             JOIN base b ON true
@@ -118,7 +120,7 @@ def _fetch_candidate_articles(conn, article_id: str, limit: int) -> list[dict]:
 
     candidates = []
     for row in rows:
-        cand_id, title, date, link, embedding_text = row
+        cand_id, title, lead, date, link, thumbnail, embedding_text = row
         embedding = _parse_embedding(embedding_text)
         if embedding is None or embedding.size == 0:
             continue
@@ -126,8 +128,10 @@ def _fetch_candidate_articles(conn, article_id: str, limit: int) -> list[dict]:
             {
                 "id": cand_id,
                 "title": title,
+                "lead": lead,
                 "date": date,
                 "link": link,
+                "thumbnail": thumbnail,
                 "embedding": embedding,
             }
         )
@@ -318,4 +322,3 @@ if __name__ == "__main__":
     print("\nSelected articles:")
     for i, art in enumerate(selected, start=1):
         print(f"  {i:02d}. {art['date']} | {art['id']} | {art['title']}")
-

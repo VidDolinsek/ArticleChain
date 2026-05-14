@@ -14,7 +14,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.5535, inter=0.4860, coherence=0.0675
   Tour de France: count=38, intra=0.5640, inter=0.4408, coherence=0.1231
   Vojna v Ukrajini: count=53, intra=0.5283, inter=0.4828, coherence=0.0455
-
+mean_coherence = 0.07348
 ================================================================================
 Model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 Loading weights: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 199/199 [00:00<00:00, 3920.72it/s]
@@ -30,6 +30,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.4125, inter=0.1072, coherence=0.3052
   Tour de France: count=38, intra=0.4112, inter=0.0969, coherence=0.3143
   Vojna v Ukrajini: count=53, intra=0.2700, inter=0.1021, coherence=0.1679
+mean_coherence = 0.24910
 
 ================================================================================
 Model: sentence-transformers/all-mpnet-base-v2
@@ -46,6 +47,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.5911, inter=0.4995, coherence=0.0916
   Tour de France: count=38, intra=0.5944, inter=0.4933, coherence=0.1011
   Vojna v Ukrajini: count=53, intra=0.5705, inter=0.5023, coherence=0.0682
+mean_coherence = 0.08426
 
 ================================================================================
 Model: embaas/sentence-transformers-e5-large-v2
@@ -62,6 +64,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.8563, inter=0.8179, coherence=0.0385
   Tour de France: count=38, intra=0.8552, inter=0.8168, coherence=0.0383
   Vojna v Ukrajini: count=53, intra=0.8373, inter=0.8199, coherence=0.0174
+mean_coherence = 0.02912
 
 ================================================================================
 Model: sentence-transformers/distiluse-base-multilingual-cased-v2
@@ -78,6 +81,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.3068, inter=0.0831, coherence=0.2236
   Tour de France: count=38, intra=0.3368, inter=0.0783, coherence=0.2586
   Vojna v Ukrajini: count=53, intra=0.1909, inter=0.0798, coherence=0.1111
+mean_coherence = 0.19262
 
 ================================================================================
 Model: sentence-transformers/paraphrase-multilingual-mpnet-base-v2
@@ -94,6 +98,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.4792, inter=0.1687, coherence=0.3105
   Tour de France: count=38, intra=0.4638, inter=0.1536, coherence=0.3102
   Vojna v Ukrajini: count=53, intra=0.2974, inter=0.1386, coherence=0.1588
+mean_coherence = 0.24776
 
 ================================================================================
 Model: sentence-transformers/stsb-xlm-r-multilingual
@@ -110,6 +115,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.5083, inter=0.2121, coherence=0.2963
   Tour de France: count=38, intra=0.5323, inter=0.2732, coherence=0.2591
   Vojna v Ukrajini: count=53, intra=0.2958, inter=0.2028, coherence=0.0929
+mean_coherence = 0.19052
 
 ================================================================================
 Model: intfloat/multilingual-e5-large
@@ -126,25 +132,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.8220, inter=0.7572, coherence=0.0648
   Tour de France: count=38, intra=0.8184, inter=0.7573, coherence=0.0611
   Vojna v Ukrajini: count=53, intra=0.7864, inter=0.7590, coherence=0.0274
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+mean_coherence = 0.04643
 
 ================================================================================
 Model: sentence-transformers/all-MiniLM-L6-v2
@@ -162,6 +150,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.5535, inter=0.4860, coherence=0.0675
   Tour de France: count=38, intra=0.5640, inter=0.4408, coherence=0.1231
   Vojna v Ukrajini: count=53, intra=0.5283, inter=0.4828, coherence=0.0455
+mean_coherence = 0.07348
 
 ================================================================================
 Model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
@@ -178,6 +167,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.4125, inter=0.1072, coherence=0.3052
   Tour de France: count=38, intra=0.4112, inter=0.0969, coherence=0.3143
   Vojna v Ukrajini: count=53, intra=0.2700, inter=0.1021, coherence=0.1679
+mean_coherence = 0.24910
 
 ================================================================================
 Model: sentence-transformers/all-mpnet-base-v2
@@ -194,6 +184,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.5911, inter=0.4995, coherence=0.0916
   Tour de France: count=38, intra=0.5944, inter=0.4933, coherence=0.1011
   Vojna v Ukrajini: count=53, intra=0.5705, inter=0.5023, coherence=0.0682
+mean_coherence = 0.08426
 
 ================================================================================
 Model: embaas/sentence-transformers-e5-large-v2
@@ -210,6 +201,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.8563, inter=0.8179, coherence=0.0385
   Tour de France: count=38, intra=0.8552, inter=0.8168, coherence=0.0383
   Vojna v Ukrajini: count=53, intra=0.8373, inter=0.8199, coherence=0.0174
+mean_coherence = 0.02912
 
 ================================================================================
 Model: sentence-transformers/distiluse-base-multilingual-cased-v2
@@ -226,6 +218,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.3068, inter=0.0831, coherence=0.2236
   Tour de France: count=38, intra=0.3368, inter=0.0783, coherence=0.2586
   Vojna v Ukrajini: count=53, intra=0.1909, inter=0.0798, coherence=0.1111
+mean_coherence = 0.19262
 
 ================================================================================
 Model: sentence-transformers/paraphrase-multilingual-mpnet-base-v2
@@ -242,6 +235,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.4792, inter=0.1687, coherence=0.3105
   Tour de France: count=38, intra=0.4638, inter=0.1536, coherence=0.3102
   Vojna v Ukrajini: count=53, intra=0.2974, inter=0.1386, coherence=0.1588
+mean_coherence = 0.24776
 
 ================================================================================
 Model: sentence-transformers/stsb-xlm-r-multilingual
@@ -258,6 +252,7 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.5083, inter=0.2121, coherence=0.2963
   Tour de France: count=38, intra=0.5323, inter=0.2732, coherence=0.2591
   Vojna v Ukrajini: count=53, intra=0.2958, inter=0.2028, coherence=0.0929
+mean_coherence = 0.19052
 
 ================================================================================
 Model: intfloat/multilingual-e5-large
@@ -274,3 +269,4 @@ Entity coherence:
   Tadej Pogačar: count=96, intra=0.8220, inter=0.7572, coherence=0.0648
   Tour de France: count=38, intra=0.8184, inter=0.7573, coherence=0.0611
   Vojna v Ukrajini: count=53, intra=0.7864, inter=0.7590, coherence=0.0274
+mean_coherence = 0.04643
