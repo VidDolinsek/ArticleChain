@@ -1,7 +1,11 @@
 """
-recommender.py
---------------
+recommender_weighted.py
+-----------------------
 Embed a user query and retrieve the most similar articles from the database.
+
+Ranking strategy: weighted sum of min-max-normalised semantic and lexical scores.
+
+    final = SEMANTIC_WEIGHT * norm(semantic) + LEXICAL_WEIGHT * norm(lexical)
 
 The model must match the one used to generate the stored embeddings:
     sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2  (dim=384)
@@ -23,16 +27,15 @@ from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
-# Must match generate_embeddings.py — changing this breaks similarity search
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-
-# Number of results to return by default
 DEFAULT_TOP_K = 20
+
+SEMANTIC_WEIGHT = 0.5
+LEXICAL_WEIGHT = 0.5
 
 DB_CONFIG = {
     "user": "rtvdb",
-    # DB_PASSWORD env var overrides the fallback
-    "password": os.getenv("DB_PASSWORD"),
+    "password": os.getenv("DB_PASSWORD") or "KiliForPresident2026",
     "host": "rtvdb.postgres.database.azure.com",
     "port": 5432,
     "database": "postgres",
@@ -131,7 +134,6 @@ def search_articles(
         return []
 
     lexical_available = len(lexical_ids) > 0
-    print(lexical_available)
     cur = conn.cursor()
     try:
         if semantic_ok:
@@ -207,58 +209,47 @@ def search_articles(
             return [0.0 for _ in values]
         return [(v - lo) / (hi - lo) for v in values]
 
-    def _ranks(values: list[float]) -> list[int]:
-        if not values:
-            return []
-        order = sorted(range(len(values)), key=lambda i: values[i], reverse=True)
-        ranks = [0] * len(values)
-        for rank, idx in enumerate(order, start=1):
-            ranks[idx] = rank
-        return ranks
-
     semantic_scores = [r["semantic_score"] for r in raw_results]
     lexical_scores = [r["lexical_score"] for r in raw_results]
 
     semantic_norm = _normalize(semantic_scores) if semantic_ok else [0.0] * len(raw_results)
     lexical_norm = _normalize(lexical_scores) if lexical_available else [0.0] * len(raw_results)
 
-    semantic_ranks = _ranks(semantic_norm) if semantic_ok else []
-    lexical_ranks = _ranks(lexical_norm) if lexical_available else []
-    rrf_k = 60
-
     for idx, item in enumerate(raw_results):
         if not semantic_ok:
-            final_score = 1.0 / (rrf_k + lexical_ranks[idx])
+            final_score = lexical_norm[idx]
         elif not lexical_available:
-            final_score = 1.0 / (rrf_k + semantic_ranks[idx])
+            final_score = semantic_norm[idx]
         else:
-            final_score = (1.0 / (rrf_k + semantic_ranks[idx])) + (1.0 / (rrf_k + lexical_ranks[idx]))
+            final_score = SEMANTIC_WEIGHT * semantic_norm[idx] + LEXICAL_WEIGHT * lexical_norm[idx]
         item["score"] = round(float(final_score), 4)
 
     raw_results.sort(key=lambda x: x["score"], reverse=True)
 
-    results = []
-    for item in raw_results[:top_k]:
-        results.append(
-            {
-                "id": item["id"],
-                "title": item["title"],
-                "lead": item["lead"],
-                "date": item["date"],
-                "link": item["link"],
-                "thumbnail": item["thumbnail"],
-                "score": item["score"],
-            }
-        )
-
-    return results
+    return [
+        {
+            "id": item["id"],
+            "title": item["title"],
+            "lead": item["lead"],
+            "date": item["date"],
+            "link": item["link"],
+            "thumbnail": item["thumbnail"],
+            "score": item["score"],
+        }
+        for item in raw_results[:top_k]
+    ]
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Quick test for hybrid search.")
+    parser = argparse.ArgumentParser(description="Quick test for weighted hybrid search.")
     parser.add_argument("query", help="Search query")
     parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
+    parser.add_argument("--semantic-weight", type=float, default=SEMANTIC_WEIGHT)
+    parser.add_argument("--lexical-weight", type=float, default=LEXICAL_WEIGHT)
     args = parser.parse_args()
+
+    SEMANTIC_WEIGHT = args.semantic_weight
+    LEXICAL_WEIGHT = args.lexical_weight
 
     conn = connect_db()
     try:
