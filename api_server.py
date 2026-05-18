@@ -1,3 +1,8 @@
+"""
+    To run: uvicorn api_server:app --reload
+"""
+
+
 import os
 import sys
 import json

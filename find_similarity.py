@@ -168,7 +168,7 @@ Pravila:
 
     return _call_similarity_llm(prompt)
 
-
+# LLM klic, ki najde podobnosti med članki in jih opiše kot skupek 
 def find_similarity_from_all_articles(articles: list[dict]) -> dict:
     if not articles:
         raise ValueError("At least one article is required")

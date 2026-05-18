@@ -207,19 +207,32 @@ def search_articles(
             return [0.0 for _ in values]
         return [(v - lo) / (hi - lo) for v in values]
 
+    def _ranks(values: list[float]) -> list[int]:
+        if not values:
+            return []
+        order = sorted(range(len(values)), key=lambda i: values[i], reverse=True)
+        ranks = [0] * len(values)
+        for rank, idx in enumerate(order, start=1):
+            ranks[idx] = rank
+        return ranks
+
     semantic_scores = [r["semantic_score"] for r in raw_results]
     lexical_scores = [r["lexical_score"] for r in raw_results]
 
     semantic_norm = _normalize(semantic_scores) if semantic_ok else [0.0] * len(raw_results)
     lexical_norm = _normalize(lexical_scores) if lexical_available else [0.0] * len(raw_results)
 
+    semantic_ranks = _ranks(semantic_norm) if semantic_ok else []
+    lexical_ranks = _ranks(lexical_norm) if lexical_available else []
+    rrf_k = 60
+
     for idx, item in enumerate(raw_results):
         if not semantic_ok:
-            final_score = lexical_norm[idx]
+            final_score = 1.0 / (rrf_k + lexical_ranks[idx])
         elif not lexical_available:
-            final_score = semantic_norm[idx]
+            final_score = 1.0 / (rrf_k + semantic_ranks[idx])
         else:
-            final_score = 0.0 * semantic_norm[idx] + 1.0 * lexical_norm[idx]
+            final_score = (1.0 / (rrf_k + semantic_ranks[idx])) + (1.0 / (rrf_k + lexical_ranks[idx]))
         item["score"] = round(float(final_score), 4)
 
     raw_results.sort(key=lambda x: x["score"], reverse=True)
