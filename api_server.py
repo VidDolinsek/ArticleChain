@@ -20,7 +20,12 @@ from pydantic import BaseModel
 # Make sure we can import local modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from query_to_recommendation.recommender import load_model, connect_db, search_articles
-from find_groups import _fetch_base_article, _fetch_candidate_articles, give_x_diverse_volume
+from find_groups import (
+    _fetch_base_article,
+    _fetch_candidate_articles,
+    _parse_embedding,
+    give_x_diverse_volume,
+)
 from find_next import get_next
 from find_similarity import find_similarity_from_all_articles
 
@@ -38,6 +43,7 @@ app.add_middleware(
 model = None
 CHAIN_LENGTH = 5
 CHAIN_CANDIDATE_LIMIT = 100
+TIMELESS_CANDIDATE_LIMIT = 1
 CHAIN_JOBS = {}
 CHAIN_JOBS_LOCK = Lock()
 BACKGROUND_EXECUTOR = ThreadPoolExecutor(max_workers=4)
@@ -185,10 +191,11 @@ def _get_chain_job(job_id):
         return deepcopy(job) if job else None
 
 
-def _build_article_chain(conn, start_article, length=CHAIN_LENGTH):
+def _build_article_chain(conn, start_article, length=CHAIN_LENGTH, excluded_ids=None):
     chain = []
     current_article = start_article
-    used_ids = {start_article["id"]}
+    used_ids = set(excluded_ids or [])
+    used_ids.add(start_article["id"])
 
     for _ in range(length):
         candidates = [
@@ -227,6 +234,129 @@ def _build_article_chain(conn, start_article, length=CHAIN_LENGTH):
     return chain
 
 
+def _fetch_timeless_candidate_articles(conn, article_id: str, limit: int, excluded_ids=None) -> list[dict]:
+    excluded_ids = list(excluded_ids or [])
+    cur = conn.cursor()
+    cur.execute("SET timezone = 'Europe/Ljubljana';")
+    cur.execute(
+        """
+        WITH base AS (
+            SELECT id, embedding
+            FROM articles
+            WHERE id = %s
+        )
+        SELECT
+            a.id,
+            a.title,
+            a.lead,
+            a.date,
+            a.link,
+            a.thumbnail,
+            a.embedding::text
+        FROM articles a
+        JOIN base b ON true
+        WHERE a.embedding IS NOT NULL
+          AND a.id <> b.id
+          AND NOT (a.id = ANY(%s))
+        ORDER BY a.embedding <-> b.embedding
+        LIMIT %s;
+        """,
+        (article_id, excluded_ids, limit),
+    )
+    rows = cur.fetchall()
+    cur.close()
+
+    candidates = []
+    for row in rows:
+        cand_id, title, lead, date, link, thumbnail, embedding_text = row
+        embedding = _parse_embedding(embedding_text)
+        if embedding is None or embedding.size == 0:
+            continue
+        candidates.append(
+            {
+                "id": cand_id,
+                "title": title,
+                "lead": lead,
+                "date": date,
+                "link": link,
+                "thumbnail": thumbnail,
+                "embedding": embedding,
+            }
+        )
+    return candidates
+
+
+def _build_timeless_article_chain(conn, start_article, length=CHAIN_LENGTH, excluded_ids=None):
+    chain = []
+    current_article = start_article
+    used_ids = set(excluded_ids or [])
+    used_ids.add(start_article["id"])
+
+    for _ in range(length):
+        candidates = _fetch_timeless_candidate_articles(
+            conn,
+            current_article["id"],
+            TIMELESS_CANDIDATE_LIMIT,
+            excluded_ids=used_ids,
+        )
+        if not candidates:
+            break
+
+        next_article = candidates[0]
+        chain.append(
+            _format_article(
+                next_article,
+                _cosine_similarity(
+                    current_article["embedding"],
+                    next_article["embedding"],
+                ),
+            )
+        )
+        used_ids.add(next_article["id"])
+        current_article = next_article
+
+    return chain
+
+
+def _preload_single_chain_summary(job_id, base_article, result_article, include_llm):
+    if not include_llm:
+        result_article["route_summary"] = _disabled_similarity()
+        result_article["summary_ready"] = True
+        _update_chain_job(
+            job_id,
+            status="complete",
+            summaries_ready=True,
+            results=[result_article],
+        )
+        return
+
+    conn = connect_db()
+    try:
+        path = _ordered_unique_ids([
+            base_article["id"],
+            result_article["id"],
+            *(chain_article["id"] for chain_article in result_article.get("chain", [])),
+        ])
+        article_texts = _fetch_article_texts(conn, path)
+        result_article["route_summary"] = _summarize_article_path(article_texts, path)
+        result_article["summary_ready"] = True
+
+        _update_chain_job(
+            job_id,
+            status="complete",
+            summaries_ready=True,
+            results=[result_article],
+        )
+    except Exception as exc:
+        _update_chain_job(
+            job_id,
+            status="error",
+            error=str(exc),
+        )
+    finally:
+        conn.close()
+
+
 def _build_chain_summaries(conn, paths, include_llm):
     if not include_llm:
         return [_disabled_similarity() for _ in paths]
@@ -254,16 +384,26 @@ def _build_chain_summaries(conn, paths, include_llm):
 def _preload_chains_and_summaries(job_id, base_article, selected_articles, include_llm):
     conn = connect_db()
     full_results = []
+    selected_ids = {article["id"] for article in selected_articles}
+    globally_used_ids = {base_article["id"], *selected_ids}
     try:
         for index, article in enumerate(selected_articles):
             formatted_article = _format_article(
                 article,
                 _cosine_similarity(base_article["embedding"], article["embedding"]),
             )
-            formatted_article["chain"] = _build_article_chain(conn, article)
+            formatted_article["chain"] = _build_article_chain(
+                conn,
+                article,
+                excluded_ids=globally_used_ids,
+            )
             formatted_article["chain_ready"] = True
             formatted_article["summary_ready"] = False
             full_results.append(formatted_article)
+            globally_used_ids.update(
+                chain_article["id"]
+                for chain_article in formatted_article["chain"]
+            )
 
             current_job = _get_chain_job(job_id)
             if current_job:
@@ -281,11 +421,11 @@ def _preload_chains_and_summaries(job_id, base_article, selected_articles, inclu
 
         if include_llm:
             paths = [
-                [
+                _ordered_unique_ids([
                     base_article["id"],
                     article["id"],
                     *(chain_article["id"] for chain_article in article.get("chain", [])),
-                ]
+                ])
                 for article in full_results
             ]
             summaries = _build_chain_summaries(conn, paths, include_llm)
@@ -319,6 +459,42 @@ def search(q: str = Query(..., description="Iskalna poizvedba"), k: int = Query(
     try:
         results = search_articles(q, conn, model, top_k=k)
         return {"results": results}
+    finally:
+        conn.close()
+
+
+@app.get("/api/random")
+def random_article():
+    conn = connect_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SET timezone = 'Europe/Ljubljana';")
+        cur.execute(
+            """
+            SELECT id, title, lead, date, link, thumbnail
+            FROM articles
+            WHERE embedding IS NOT NULL
+            ORDER BY random()
+            LIMIT 1;
+            """
+        )
+        row = cur.fetchone()
+        cur.close()
+        if not row:
+            raise HTTPException(status_code=404, detail="No article found")
+
+        article_id, title, lead, date, link, thumbnail = row
+        return {
+            "article": {
+                "id": article_id,
+                "title": title or "(brez naslova)",
+                "lead": lead or "",
+                "date": str(date) if date else "",
+                "link": link or "",
+                "thumbnail": thumbnail or "",
+                "score": 0,
+            }
+        }
     finally:
         conn.close()
 
@@ -444,6 +620,47 @@ def diverse_articles(
             "results": results,
             "job_id": job_id,
             "status": "loading_chains",
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/timeless-chain")
+def timeless_chain(
+    article_id: str = Query(..., description="ID izbranega članka"),
+):
+    conn = connect_db()
+    try:
+        base = _fetch_base_article(conn, article_id)
+        if not base:
+            raise HTTPException(status_code=404, detail="Article not found")
+
+        candidates = _fetch_timeless_candidate_articles(
+            conn,
+            article_id,
+            TIMELESS_CANDIDATE_LIMIT,
+            excluded_ids={article_id},
+        )
+        if not candidates:
+            return {"results": [], "status": "complete"}
+
+        first_article = candidates[0]
+        result = _format_article(
+            first_article,
+            _cosine_similarity(base["embedding"], first_article["embedding"]),
+        )
+        result["chain"] = _build_timeless_article_chain(
+            conn,
+            first_article,
+            excluded_ids={base["id"], first_article["id"]},
+        )
+        result["chain_ready"] = True
+        result["summary_ready"] = True
+        result["route_summary"] = _disabled_similarity()
+
+        return {
+            "results": [result],
+            "status": "complete",
         }
     finally:
         conn.close()

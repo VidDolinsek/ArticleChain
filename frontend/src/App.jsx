@@ -92,7 +92,10 @@ const RouteSummaryBox = ({ summary, isLoading, isChainLoading, llmEnabled }) => 
   </aside>
 );
 
-const RoutePreview = React.forwardRef(function RoutePreview({ article, onClick }, ref) {
+const RoutePreview = React.forwardRef(function RoutePreview(
+  { article, onClick, onTimelessChain, isTimelessLoading },
+  ref,
+) {
   const isInteractive = Boolean(onClick);
 
   return (
@@ -118,6 +121,20 @@ const RoutePreview = React.forwardRef(function RoutePreview({ article, onClick }
         <h3>{article.title}</h3>
       </aside>
       <time className="route-node-date">{formatArticleDate(article.date)}</time>
+      {onTimelessChain && (
+        <button
+          type="button"
+          className="timeless-chain-button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTimelessChain();
+          }}
+          disabled={isTimelessLoading}
+        >
+          <span>{isTimelessLoading ? 'Gradim verigo...' : 'Veriga brez casovne omejitve'}</span>
+          <small>Ce imajo vasi clanki slabo podobnost originalnemu in je datum v letu 2026 uporabite ta gumb</small>
+        </button>
+      )}
     </div>
   );
 });
@@ -207,6 +224,8 @@ const RouteTree = ({
   isFetchingSummaries,
   llmEnabled,
   onArticleRestart,
+  onTimelessChain,
+  isTimelessLoading,
   onBack,
 }) => {
   const stageRef = useRef(null);
@@ -325,6 +344,8 @@ const RouteTree = ({
           article={rootArticle} 
           ref={rootRef} 
           onClick={(rootArticle.url || rootArticle.link) ? () => window.open(rootArticle.url || rootArticle.link, '_blank') : undefined} 
+          onTimelessChain={onTimelessChain}
+          isTimelessLoading={isTimelessLoading}
         />
       )}
 
@@ -413,10 +434,12 @@ function App() {
   const [k, setK] = useState(20);
   const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isRandomLoading, setIsRandomLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [diverseCount, setDiverseCount] = useState(5);
   const [isFetchingDiverse, setIsFetchingDiverse] = useState(false);
+  const [isFetchingTimelessChain, setIsFetchingTimelessChain] = useState(false);
   const [diverseResults, setDiverseResults] = useState([]);
   const [error, setError] = useState('');
   const [isPinnedPreview, setIsPinnedPreview] = useState(false);
@@ -543,6 +566,28 @@ function App() {
     }
   };
 
+  const handleRandomArticle = async () => {
+    setIsRandomLoading(true);
+    setHasSearched(true);
+    setResults([]);
+    setError('');
+    setIsClearingResults(true);
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/random');
+      if (!response.ok) throw new Error('Random article request failed');
+      const data = await response.json();
+      await fetchDiverseForArticle(data.article, { pinDelay: 0 });
+    } catch (error) {
+      console.error('Error fetching random article:', error);
+      setError('Pri izbiri naključnega članka je prišlo do napake.');
+      setHasSearched(false);
+      setIsClearingResults(false);
+    } finally {
+      setIsRandomLoading(false);
+    }
+  };
+
   const resetSearch = () => {
     setHasSearched(false);
     setResults([]);
@@ -615,6 +660,37 @@ function App() {
     fetchDiverseForArticle(article, { pinDelay: 0 });
   };
 
+  const handleTimelessChain = async () => {
+    if (!selectedArticle) return;
+
+    setIsFetchingTimelessChain(true);
+    setError('');
+    setChainJobId(null);
+    setIsFetchingSummaries(false);
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/timeless-chain?article_id=${encodeURIComponent(selectedArticle.id)}`);
+      if (!response.ok) throw new Error('Timeless chain request failed');
+      const data = await response.json();
+      const nextResults = data.results || [];
+
+      if (nextResults.length === 0) {
+        setError('Ni bilo mogoce ustvariti verige brez casovne omejitve.');
+        return;
+      }
+
+      setDiverseResults(nextResults);
+      setSelectedChainId(nextResults[0].id);
+      setChainJobId(data.status === 'complete' ? null : data.job_id || null);
+      setIsFetchingSummaries(data.status === 'loading_summaries');
+    } catch (error) {
+      console.error('Error fetching timeless chain:', error);
+      setError('Pri gradnji verige brez casovne omejitve je prislo do napake.');
+    } finally {
+      setIsFetchingTimelessChain(false);
+    }
+  };
+
   const handleChainClick = (chainId) => {
     setSelectedChainId(chainId);
   };
@@ -680,6 +756,36 @@ function App() {
               className="k-slider"
             />
           </div>
+          <button
+            type="button"
+            className="random-article-button"
+            onClick={handleRandomArticle}
+            disabled={isRandomLoading || isFetchingDiverse}
+          >
+            {isRandomLoading ? 'Izbiram...' : 'Naključni članek'}
+          </button>
+          <div className="random-options">
+            <label htmlFor="random-diverse-slider">
+              Stevilo verig za nakljucni clanek: {displayedDiverseCount}
+            </label>
+            <input
+              id="random-diverse-slider"
+              type="range"
+              min="3"
+              max={MAX_DIVERSE_COUNT}
+              value={displayedDiverseCount}
+              onChange={(e) => setDiverseCount(parseInt(e.target.value, 10))}
+              className="k-slider"
+            />
+            <label className="llm-toggle">
+              <input
+                type="checkbox"
+                checked={useLlmOutputs}
+                onChange={(e) => setUseLlmOutputs(e.target.checked)}
+              />
+              <span>Generiraj LLM povezave za verige</span>
+            </label>
+          </div>
         </form>
       </div>
 
@@ -693,6 +799,8 @@ function App() {
           isFetchingSummaries={isFetchingSummaries}
           llmEnabled={useLlmOutputs}
           onArticleRestart={handleRouteArticleRestart}
+          onTimelessChain={handleTimelessChain}
+          isTimelessLoading={isFetchingTimelessChain}
           onBack={handleRouteBack}
         />
       )}
