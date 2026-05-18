@@ -1,0 +1,3 @@
+Count: število člankov kjer se določena entiteta pojavi v skupku, kjer imamo lead, omembe, odstavke, ključne besede in avtorja. 
+Intra: povprečna podobnost med vsemi pari člankov, ki vsebujejo obembo neke določene entitete
+Inter: povprečna podobnost med vsemi članki, ki vsebujejo neko entiteto in za vsak članek 5 drugačnimi članki (ne omenjajo iste entitete in ne delijo iste teme)  

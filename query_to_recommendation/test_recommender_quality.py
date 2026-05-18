@@ -166,7 +166,7 @@ def count_term_hits(article: dict, terms: list[str]) -> int:
 
 def evaluate(results: list[dict], terms: list[str]) -> dict:
     """
-    Compute the quality metrics for one list of retrieved articles.
+    Compute the quality metrics for one list of retrieved articles (results).
 
     Returns a dict with:
         hit_rate     - fraction of articles with >= 1 matching term
@@ -414,6 +414,35 @@ def main():
     print("-" * 78)
     print("Higher is better. 'hit' = fraction of articles with >=1 match, "
           "'cov' = avg fraction of terms matched per article.")
+
+    try:
+        import matplotlib.pyplot as plt
+    except Exception as exc:
+        print(f"Plot skipped (matplotlib not available): {exc}")
+        return
+
+    term_hit_avgs = [avg(totals[s]["term_hit"]) for s in strategies]
+    term_cov_avgs = [avg(totals[s]["term_cov"]) for s in strategies]
+
+    x = list(range(len(strategies)))
+    width = 0.35
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.bar([i - width / 2 for i in x], term_hit_avgs, width, label="avg hit rate")
+    ax.bar([i + width / 2 for i in x], term_cov_avgs, width, label="avg coverage")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(strategies)
+    ax.set_ylim(0.0, 1.0)
+    ax.set_ylabel("score")
+    ax.set_title("Average hit rate and coverage (terms)")
+    ax.legend()
+    fig.tight_layout()
+
+    output_path = f"quality_summary_top{top_k}.png"
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    print(f"Saved plot to: {output_path}")
 
 
 if __name__ == "__main__":

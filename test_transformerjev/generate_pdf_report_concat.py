@@ -40,7 +40,8 @@ RANDOM_SEED = 42
 TOPIC_SAMPLE_SIZE = 20
 TOP_K_NEIGHBORS = 50
 ENTITY_SAMPLE_SIZE = 10
-NEGATIVE_SAMPLE_TRIES = 50
+NEGATIVE_SAMPLE_TRIES = 70
+NEGATIVES_PER_ARTICLE = 5 # how many negative articles we want to find for inter calculation per article 
 
 # Model identifiers to evaluate (same set used in other reports)
 MODEL_NAMES = [
@@ -177,13 +178,14 @@ def evaluate_topic_neighbor_purity(embeddings, topic_sets, rng):
         return 0.0, 0
 
     # sample as much topics as we want, make sure that the number does not exceed the number of topics we have
-    sample_size = min(TOPIC_SAMPLE_SIZE, len(candidate_indices)) 
-    sample_indices = rng.sample(candidate_indices, sample_size)
+    sample_size = min(TOPIC_SAMPLE_SIZE, len(candidate_indices))
+    sample_rng = random.Random(RANDOM_SEED)
+    sample_indices = sample_rng.sample(candidate_indices, sample_size)
 
     total_percentage = 0.0
     for index in sample_indices:
         similarities = embeddings @ embeddings[index]
-        similarities[index] = -1.0
+        similarities[index] = -1.0 # self similarity is -1 so it is not selected as the best article that matches the chosen one
 
         top_k = min(TOP_K_NEIGHBORS, len(similarities) - 1)
         top_indices = np.argpartition(-similarities, top_k)[:top_k]
@@ -207,14 +209,16 @@ def average_intra_similarity(embeddings, indices):
     group = embeddings[indices]
     similarity_matrix = group @ group.T
     upper = np.triu_indices(len(indices), k=1)
-    return float(similarity_matrix[upper].mean())
+    return float(similarity_matrix[upper].mean()) # return average similarity between all articles
 
 
 def average_inter_similarity(embeddings, indices, topic_sets, entity_blob, entity_name, rng):
     """
-    For each index in E, compare it to a random negative article that:
+    For each index in E, compare it to random negative articles that:
     - does not mention the same entity,
     - does not share the same topic (if a topic exists).
+    
+    The idea is that we get utterly different articles and that they are not similar
     """
     if not indices:
         return None
@@ -222,27 +226,27 @@ def average_inter_similarity(embeddings, indices, topic_sets, entity_blob, entit
     negative_similarities = []
     entity_lower = entity_name.lower()
 
+    # for each article that mentions some entity
     for index in indices:
         tries = 0
-        chosen_negative = None
+        negatives_found = 0
 
-        while tries < NEGATIVE_SAMPLE_TRIES:
-            candidate = rng.randrange(len(embeddings))
+    
+        # find negative articles -> a bit of randomness
+        while tries < NEGATIVE_SAMPLE_TRIES and negatives_found < NEGATIVES_PER_ARTICLE:
+            candidate = rng.randrange(len(embeddings)) # randomly select a candidate
             tries += 1
 
-            if candidate in indices:
+            if candidate in indices: # if a candidate is in the set that contains the articles mentioning some entity skip
                 continue
-            if entity_lower in entity_blob[candidate]:
+            if entity_lower in entity_blob[candidate]: # if the entity is in the blob of the candidate skip
                 continue
-            if topic_sets[index] and share_topic(topic_sets[index], topic_sets[candidate]):
+            if topic_sets[index] and share_topic(topic_sets[index], topic_sets[candidate]): # if candidate and the article share the same topic skip (choose a different article for cosine similarity)
                 continue
 
-            chosen_negative = candidate
-            break
-
-        if chosen_negative is not None:
-            similarity = float(embeddings[index] @ embeddings[chosen_negative])
+            similarity = float(embeddings[index] @ embeddings[candidate])
             negative_similarities.append(similarity)
+            negatives_found += 1
 
     if not negative_similarities:
         return None
@@ -252,10 +256,12 @@ def average_inter_similarity(embeddings, indices, topic_sets, entity_blob, entit
 
 def evaluate_entity_coherence(embeddings, entity_blob, topic_sets, rng):
     """Evaluate coherence for a random subset of entities."""
+    rng = random.Random(RANDOM_SEED)
     entities = rng.sample(NAMED_ENTITIES, min(ENTITY_SAMPLE_SIZE, len(NAMED_ENTITIES)))
     results = []
 
     for entity in entities:
+        # get all article blobs that contain the chosen entity
         indices = [i for i, blob in enumerate(entity_blob) if entity.lower() in blob]
 
         intra = average_intra_similarity(embeddings, indices)
@@ -306,8 +312,8 @@ def generate_pdf(output_filename=None):
     records = load_records(DATASET_PATH)
 
     texts = [build_concat_text(record) for record in records]
-    topic_sets = [set(normalize_topics(record["topics"])) for record in records]
-    entity_blob = [build_entity_blob(record) for record in records]
+    topic_sets = [set(normalize_topics(record["topics"])) for record in records] # list of sets of topic for each article -> topic set at some index corresponds to the article that has these topics
+    entity_blob_articles = [build_entity_blob(record) for record in records]
 
     for model_name in MODEL_NAMES:
         print(f"Evaluating {model_name}...")
@@ -329,7 +335,7 @@ def generate_pdf(output_filename=None):
         elements.append(Spacer(1, 6))
 
         elements.append(Paragraph("<b>Entity Coherence:</b>", normal_style))
-        entity_results = evaluate_entity_coherence(embeddings, entity_blob, topic_sets, rng)
+        entity_results = evaluate_entity_coherence(embeddings, entity_blob_articles, topic_sets, rng)
         entity_results = sorted(entity_results, key=lambda result: result["entity"].lower())
 
         coherence_values = [
