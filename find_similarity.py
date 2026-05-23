@@ -195,7 +195,7 @@ Dobiš več novinarskih člankov v slovenščini.
 NALOGA:
 Vrni SAMO veljavni JSON v tej obliki:
 {{
-  "connection": "<največ 40 besed>",
+  "connection": "<največ 15 besed>",
   "entities": ["entiteta1", "entiteta2", ...]
 }}
 

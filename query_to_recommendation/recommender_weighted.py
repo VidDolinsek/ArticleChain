@@ -19,6 +19,7 @@ Public API:
 import argparse
 import json
 import os
+import time
 
 import numpy as np
 import psycopg2
@@ -32,6 +33,9 @@ DEFAULT_TOP_K = 20
 
 SEMANTIC_WEIGHT = 0.5
 LEXICAL_WEIGHT = 0.5
+SEARCH_CANDIDATE_LIMIT = int(os.getenv("SEARCH_CANDIDATE_LIMIT", "200"))
+DB_STATEMENT_TIMEOUT_MS = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "10000"))
+DEBUG_SEARCH_TIMING = os.getenv("DEBUG_SEARCH_TIMING", "").strip().lower() in {"1", "true", "yes", "on"}
 
 DB_CONFIG = {
     "user": "rtvdb",
@@ -52,6 +56,7 @@ def connect_db():
     conn.autocommit = False
     cur = conn.cursor()
     cur.execute("SET timezone = 'Europe/Ljubljana';")
+    cur.execute("SET statement_timeout = %s;", (DB_STATEMENT_TIMEOUT_MS,))
     cur.close()
     return conn
 
@@ -85,16 +90,26 @@ def search_articles(
     model: SentenceTransformer,
     top_k: int = DEFAULT_TOP_K,
 ) -> list[dict]:
+    started_at = time.perf_counter()
+
+    def log_step(message: str) -> None:
+        if DEBUG_SEARCH_TIMING:
+            elapsed = time.perf_counter() - started_at
+            print(f"[weighted-search {elapsed:.2f}s] {message}", flush=True)
+
     if not query or not query.strip():
         return []
 
     query = query.strip()
+    log_step(f"start query={query!r} top_k={top_k}")
     query_vector = None
     semantic_ok = True
     try:
         query_vector = embed_query(query, model)
+        log_step("embedded query")
     except Exception:
         semantic_ok = False
+        log_step("embedding failed; using lexical search only")
 
     semantic_ids = []
     lexical_ids = []
@@ -102,18 +117,29 @@ def search_articles(
     cur = conn.cursor()
     try:
         if semantic_ok:
-            cur.execute(
-                """
-                SELECT id
-                FROM articles
-                WHERE embedding IS NOT NULL
-                ORDER BY embedding <-> %(vec)s::vector
-                LIMIT 500
-                """,
-                {"vec": query_vector},
-            )
-            semantic_ids = [row[0] for row in cur.fetchall()]
+            log_step("running semantic candidate query")
+            try:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM articles
+                    WHERE embedding IS NOT NULL
+                    ORDER BY embedding <-> %(vec)s::vector
+                    LIMIT %(limit)s
+                    """,
+                    {"vec": query_vector, "limit": SEARCH_CANDIDATE_LIMIT},
+                )
+                semantic_ids = [row[0] for row in cur.fetchall()]
+                log_step(f"semantic candidate query returned {len(semantic_ids)} ids")
+            except psycopg2.errors.QueryCanceled:
+                conn.rollback()
+                cur.close()
+                cur = conn.cursor()
+                semantic_ok = False
+                semantic_ids = []
+                log_step("semantic candidate query timed out; falling back to lexical search")
 
+        log_step("running lexical candidate query")
         cur.execute(
             """
             SELECT id,
@@ -121,15 +147,17 @@ def search_articles(
             FROM articles
             WHERE search_vec @@ plainto_tsquery('simple', %(query)s)
             ORDER BY rank DESC
-            LIMIT 500
+            LIMIT %(limit)s
             """,
-            {"query": query},
+            {"query": query, "limit": SEARCH_CANDIDATE_LIMIT},
         )
         lexical_ids = [row[0] for row in cur.fetchall()]
+        log_step(f"lexical candidate query returned {len(lexical_ids)} ids")
     finally:
         cur.close()
 
     candidate_ids = list(set(semantic_ids + lexical_ids))
+    log_step(f"combined candidates: {len(candidate_ids)}")
     if not candidate_ids:
         return []
 
@@ -137,6 +165,7 @@ def search_articles(
     cur = conn.cursor()
     try:
         if semantic_ok:
+            log_step("fetching candidate article details with semantic scores")
             cur.execute(
                 """
                 SELECT
@@ -154,6 +183,7 @@ def search_articles(
                 {"ids": candidate_ids, "query": query, "vec": query_vector},
             )
         else:
+            log_step("fetching candidate article details without semantic scores")
             cur.execute(
                 """
                 SELECT
@@ -170,6 +200,7 @@ def search_articles(
                 {"ids": candidate_ids, "query": query},
             )
         rows = cur.fetchall()
+        log_step(f"article detail query returned {len(rows)} rows")
     finally:
         cur.close()
 
@@ -225,6 +256,7 @@ def search_articles(
         item["score"] = round(float(final_score), 4)
 
     raw_results.sort(key=lambda x: x["score"], reverse=True)
+    log_step("ranked results")
 
     return [
         {

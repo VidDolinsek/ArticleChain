@@ -1,0 +1,11 @@
+# Runtime dependencies for api_server.py on Azure App Service.
+fastapi
+gunicorn
+numpy
+openai
+psycopg2-binary
+pydantic
+python-dotenv
+scikit-learn
+sentence-transformers
+uvicorn[standard]

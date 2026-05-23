@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import uuid
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from threading import Lock
@@ -19,7 +20,7 @@ from pydantic import BaseModel
 
 # Make sure we can import local modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from query_to_recommendation.recommender import load_model, connect_db, search_articles
+from query_to_recommendation.recommender_weighted import load_model, connect_db, search_articles
 from find_groups import (
     _fetch_base_article,
     _fetch_candidate_articles,
@@ -455,10 +456,18 @@ def startup_event():
 
 @app.get("/api/search")
 def search(q: str = Query(..., description="Iskalna poizvedba"), k: int = Query(50, description="Število člankov")):
+    started_at = time.perf_counter()
+    print(f"[api-search] start q={q!r} k={k}", flush=True)
     conn = connect_db()
     try:
         results = search_articles(q, conn, model, top_k=k)
+        elapsed = time.perf_counter() - started_at
+        print(f"[api-search] complete count={len(results)} elapsed={elapsed:.2f}s", flush=True)
         return {"results": results}
+    except Exception as exc:
+        elapsed = time.perf_counter() - started_at
+        print(f"[api-search] error after {elapsed:.2f}s: {exc}", flush=True)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         conn.close()
 

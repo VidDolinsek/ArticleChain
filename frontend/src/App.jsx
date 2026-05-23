@@ -2,6 +2,8 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import './App.css';
 
 const MAX_DIVERSE_COUNT = 7;
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+const apiUrl = (path) => `${API_BASE_URL}${path}`;
 
 const formatArticleDate = (date) => {
   if (!date) return '';
@@ -491,7 +493,7 @@ function App() {
 
     const pollChainJob = async () => {
       try {
-        const response = await fetch(`http://127.0.0.1:8000/api/chain-jobs/${chainJobId}`);
+        const response = await fetch(apiUrl(`/api/chain-jobs/${chainJobId}`));
         if (!response.ok) throw new Error('Chain job polling failed');
         const data = await response.json();
         if (isCancelled) return;
@@ -547,7 +549,7 @@ function App() {
     setError('');
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/search?q=${encodeURIComponent(query)}&k=${k}`);
+      const response = await fetch(apiUrl(`/api/search?q=${encodeURIComponent(query)}&k=${k}`));
       if (!response.ok) throw new Error('Search request failed');
       const data = await response.json();
       setResults(data.results || []);
@@ -574,7 +576,7 @@ function App() {
     setIsClearingResults(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/random');
+      const response = await fetch(apiUrl('/api/random'));
       if (!response.ok) throw new Error('Random article request failed');
       const data = await response.json();
       await fetchDiverseForArticle(data.article, { pinDelay: 0 });
@@ -633,7 +635,7 @@ function App() {
     }, pinDelay);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/diverse?article_id=${encodeURIComponent(baseArticle.id)}&x=${requestedCount}&include_llm=${useLlmOutputs}`);
+      const response = await fetch(apiUrl(`/api/diverse?article_id=${encodeURIComponent(baseArticle.id)}&x=${requestedCount}&include_llm=${useLlmOutputs}`));
       if (!response.ok) throw new Error('Diverse request failed');
       const data = await response.json();
       const nextResults = data.results || [];
@@ -669,7 +671,7 @@ function App() {
     setIsFetchingSummaries(false);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/timeless-chain?article_id=${encodeURIComponent(selectedArticle.id)}`);
+      const response = await fetch(apiUrl(`/api/timeless-chain?article_id=${encodeURIComponent(selectedArticle.id)}`));
       if (!response.ok) throw new Error('Timeless chain request failed');
       const data = await response.json();
       const nextResults = data.results || [];
