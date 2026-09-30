@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 load_dotenv()
 
-BATCH_SIZE = 512
+BATCH_SIZE = 256
 
 DB_CONFIG = {
     "user": "rtvdb",

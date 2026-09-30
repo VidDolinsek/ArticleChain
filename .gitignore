@@ -3,3 +3,5 @@ __pycache__/
 mmc*.yaml
 .env
 route.json
+.venv
+/build/

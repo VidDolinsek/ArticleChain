@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$SCRIPT_DIR"
+OUTPUT_DIR="$SCRIPT_DIR/build/backend"
+ZIP_PATH="$SCRIPT_DIR/build/backend.zip"
+MARKER_FILE="$OUTPUT_DIR/.generated-by-create-backend"
+
+if [[ ! -d "$PROJECT_DIR" ]]; then
+  echo "Project directory not found: $PROJECT_DIR" >&2
+  exit 1
+fi
+
+required_files=(
+  "api_server.py"
+  "find_groups.py"
+  "find_next.py"
+  "find_similarity.py"
+  "requirements.txt"
+  "query_to_recommendation/recommender_RRF.py"
+  "query_to_recommendation/recommender_weighted.py"
+)
+
+for file in "${required_files[@]}"; do
+  if [[ ! -f "$PROJECT_DIR/$file" ]]; then
+    echo "Missing required backend file: $PROJECT_DIR/$file" >&2
+    exit 1
+  fi
+done
+
+if [[ -e "$OUTPUT_DIR" && ! -f "$MARKER_FILE" ]]; then
+  echo "Refusing to overwrite existing non-generated folder: $OUTPUT_DIR" >&2
+  echo "Move or remove it first, then run this script again." >&2
+  exit 1
+fi
+
+rm -rf "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR/query_to_recommendation"
+
+cp "$PROJECT_DIR/api_server.py" "$OUTPUT_DIR/"
+cp "$PROJECT_DIR/find_groups.py" "$OUTPUT_DIR/"
+cp "$PROJECT_DIR/find_next.py" "$OUTPUT_DIR/"
+cp "$PROJECT_DIR/find_similarity.py" "$OUTPUT_DIR/"
+cp "$PROJECT_DIR/requirements.txt" "$OUTPUT_DIR/"
+cp "$PROJECT_DIR/query_to_recommendation/recommender_RRF.py" "$OUTPUT_DIR/query_to_recommendation/"
+cp "$PROJECT_DIR/query_to_recommendation/recommender_weighted.py" "$OUTPUT_DIR/query_to_recommendation/"
+
+touch "$OUTPUT_DIR/query_to_recommendation/__init__.py"
+touch "$MARKER_FILE"
+
+rm -f "$ZIP_PATH"
+(
+  cd "$OUTPUT_DIR"
+  zip -qr "$ZIP_PATH" \
+    api_server.py \
+    find_groups.py \
+    find_next.py \
+    find_similarity.py \
+    requirements.txt \
+    query_to_recommendation
+)
+
+cat <<EOF
+Backend deploy package created.
+
+Folder: $OUTPUT_DIR
+Zip:    $ZIP_PATH
+
+Zip root contains:
+  api_server.py
+  requirements.txt
+  query_to_recommendation/
+
+Azure startup command:
+  gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 api_server:app --timeout 600
+EOF
