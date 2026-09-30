@@ -4,9 +4,6 @@ An interactive webpage for searching Slovenian RTV MMC news articles and explori
 
 **[Watch the video demonstration on YouTube](https://youtu.be/NIdICdmnm3A).**
 
-## Walkthrough
-
-The screenshots below were extracted from the latest local OBS recording, `2026-09-30 11-06-19.mp4` (1 minute 39 seconds), and cropped to 1280 × 644 to remove the desktop panel, browser tabs, and address bar. The interface is in Slovenian.
 
 ### 1. Search for a topic
 
